@@ -8,6 +8,8 @@
 #include <glm/ext.hpp>
 #include <CanvasPoint.h>
 
+#include "Colour.h"
+
 #define WIDTH 320
 #define HEIGHT 240
 
@@ -35,36 +37,35 @@ std::vector<glm::vec3> interpolateThreeElementValues(glm::vec3 from, glm::vec3 t
 	return result;
 }
 
-void drawLine(CanvasPoint from, CanvasPoint to) {
-	float xDiff = from.x - to.x;
-	float yDiff = from.y - to.y;
+void drawLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindow &window) {
+	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+	float xDiff = to.x - from.x;
+	float yDiff = to.y - from.y;
 	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
-	float xStepSize
-
+	float xStepSize = xDiff / numberOfSteps;
+	float yStepSize = yDiff / numberOfSteps;
+	for (float i = 0.0; i <= numberOfSteps; i++) {
+		float x = from.x + (i * xStepSize);
+		float y = from.y + (i * yStepSize);
+		window.setPixelColour(round(x), round(y), c);
+	}
 }
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
-	// std::vector<float> colour_vector = interpolateSingleFloats(255, 0, window.width);
-	glm::vec3 topLeft(255, 0, 0);        // red
-	glm::vec3 topRight(0, 0, 255);       // blue
-	glm::vec3 bottomRight(0, 255, 0);    // green
-	glm::vec3 bottomLeft(255, 255, 0);   // yellow
-	std::vector<glm::vec3> leftSide = interpolateThreeElementValues(topLeft, bottomLeft, window.height);
-	std::vector<glm::vec3> rightSide = interpolateThreeElementValues(topRight, bottomRight, window.height);
 	for (size_t y = 0; y < window.height; y++) {
-		std::vector<glm::vec3> row = interpolateThreeElementValues(leftSide[y], rightSide[y], window.width);
 		for (size_t x = 0; x < window.width; x++) {
-			// float red = rand() % 256;
-			// float green = 0.0;
-			// float blue = rand() % 256;
-			float red = row[x].r;
-			float green = row[x].g;
-			float blue = row[x].b;
+			float red = 255;
+			float green = 0.0;
+			float blue = 255;
 			uint32_t colour = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue);
 			window.setPixelColour(x, y, colour);
 		}
 	}
+	drawLine(CanvasPoint(WIDTH / 2, 0), CanvasPoint(WIDTH / 2, HEIGHT - 1), Colour(255,255,255), window);
+	drawLine(CanvasPoint(WIDTH / 3, HEIGHT / 2), CanvasPoint(2*WIDTH / 3, HEIGHT / 2), Colour(255,255,255), window);
+	drawLine(CanvasPoint(0, 0), CanvasPoint(WIDTH / 2, HEIGHT / 2), Colour(255,255,255), window);
+	drawLine(CanvasPoint(WIDTH - 1, 0), CanvasPoint(WIDTH / 2, HEIGHT / 2), Colour(255,255,255), window);
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
