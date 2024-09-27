@@ -7,6 +7,8 @@
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
 #include <CanvasPoint.h>
+#include <set>
+
 
 #include "Colour.h"
 
@@ -51,21 +53,31 @@ void drawLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindow &wi
 	}
 }
 
+
+void drawTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
+	drawLine(triangle.v0(), triangle.v1(), colour, window);
+	drawLine(triangle.v1(), triangle.v2(), colour, window);
+	drawLine(triangle.v2(), triangle.v0(), colour, window);
+}
+
+void randomTriangle(DrawingWindow &window) {
+	CanvasPoint p0 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
+	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
+	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
+	drawTriangle(CanvasTriangle(p0,p1,p2), Colour(255,255,255), window);
+}
+
 void draw(DrawingWindow &window) {
 	window.clearPixels();
 	for (size_t y = 0; y < window.height; y++) {
 		for (size_t x = 0; x < window.width; x++) {
-			float red = 255;
+			float red = 250;
 			float green = 0.0;
 			float blue = 255;
 			uint32_t colour = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue);
 			window.setPixelColour(x, y, colour);
 		}
 	}
-	drawLine(CanvasPoint(WIDTH / 2, 0), CanvasPoint(WIDTH / 2, HEIGHT - 1), Colour(255,255,255), window);
-	drawLine(CanvasPoint(WIDTH / 3, HEIGHT / 2), CanvasPoint(2*WIDTH / 3, HEIGHT / 2), Colour(255,255,255), window);
-	drawLine(CanvasPoint(0, 0), CanvasPoint(WIDTH / 2, HEIGHT / 2), Colour(255,255,255), window);
-	drawLine(CanvasPoint(WIDTH - 1, 0), CanvasPoint(WIDTH / 2, HEIGHT / 2), Colour(255,255,255), window);
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -74,6 +86,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_RIGHT) std::cout << "RIGHT" << std::endl;
 		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
 		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
+		else if (event.key.keysym.sym == SDLK_u) randomTriangle(window);
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
 		window.savePPM("output.ppm");
 		window.saveBMP("output.bmp");
@@ -81,18 +94,12 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 }
 
 int main(int argc, char *argv[]) {
-	// std::vector<glm::vec3> result; //checks 3 element interpolation
-	// glm::vec3 from(1.0, 4.0, 9.2);
-	// glm::vec3 to(4.0, 1.0, 9.8);
-	// result = interpolateThreeElementValues(from, to, 4);
-	// for(size_t i=0; i<result.size(); i++) std::cout << to_string(result[i]) << " ";
-	// std::cout << std::endl;
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
+	draw(window);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
-		draw(window);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
