@@ -151,10 +151,12 @@ void drawFillTriangle(DrawingWindow &window) {
 void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWindow &window) {
 	std::vector<TexturePoint> pixelsOnTexture = pixelsOnTextureLine(from.texturePoint, to.texturePoint);
 	int sizeOfLine = to.x - from.x;
-	std::cout << "TEST" << std::endl;
 	for (float i = 0; i < sizeOfLine; i++) {
-		int texturePixel = round(i / sizeOfLine * pixelsOnTexture.size());
-		window.setPixelColour(from.x + i, from.y, texture.pixels[pixelsOnTexture[texturePixel].x + pixelsOnTexture[texturePixel].y * texture.width]);
+		int texturePixel = (i / sizeOfLine) * pixelsOnTexture.size();
+		uint32_t colour = texture.pixels[round(pixelsOnTexture[texturePixel].x) + round(pixelsOnTexture[texturePixel].y  * texture.width)];
+		std::cout << texturePixel << std::endl;
+		std::cout << colour << std::endl;
+		window.setPixelColour(from.x + i, from.y, colour);
 	}
 }
 
@@ -239,9 +241,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			CanvasPoint p0 = CanvasPoint(160, 10);
 			CanvasPoint p1 = CanvasPoint(300, 230);
 			CanvasPoint p2 = CanvasPoint(10, 150);
-			p0.texturePoint = TexturePoint(195,5);
-			p1.texturePoint = TexturePoint(395,380);
-			p2.texturePoint = TexturePoint(65,330);
+			p0.texturePoint = TexturePoint(9,5);
+			p1.texturePoint = TexturePoint(95,20);
+			p2.texturePoint = TexturePoint(305,330);
 
 			std::cout << "TEST";
 
