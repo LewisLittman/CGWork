@@ -8,6 +8,7 @@
 #include <glm/ext.hpp>
 #include <CanvasPoint.h>
 #include <set>
+#include <TextureMap.h>
 
 
 #include "Colour.h"
@@ -53,6 +54,37 @@ void drawLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindow &wi
 	}
 }
 
+std::vector<CanvasPoint> pixelsOnLine(CanvasPoint from, CanvasPoint to) {
+	std::vector<CanvasPoint> pixels;
+	float xDiff = to.x - from.x;
+	float yDiff = to.y - from.y;
+	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
+	float xStepSize = xDiff / numberOfSteps;
+	float yStepSize = yDiff / numberOfSteps;
+	for (float i = 0.0; i <= numberOfSteps; i++) {
+		float x = from.x + (i * xStepSize);
+		float y = from.y + (i * yStepSize);
+		CanvasPoint pixel = CanvasPoint(round(x), round(y));
+		pixels.push_back(pixel);
+	}
+	return pixels;
+}
+
+std::vector<TexturePoint> pixelsOnTextureLine(TexturePoint from, TexturePoint to) {
+	std::vector<TexturePoint> pixels;
+	float xDiff = to.x - from.x;
+	float yDiff = to.y - from.y;
+	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
+	float xStepSize = xDiff / numberOfSteps;
+	float yStepSize = yDiff / numberOfSteps;
+	for (float i = 0.0; i <= numberOfSteps; i++) {
+		float x = from.x + (i * xStepSize);
+		float y = from.y + (i * yStepSize);
+		TexturePoint pixel = TexturePoint(round(x), round(y));
+		pixels.push_back(pixel);
+	}
+	return pixels;
+}
 
 void drawTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
 	drawLine(triangle.v0(), triangle.v1(), colour, window);
@@ -65,6 +97,120 @@ void randomTriangle(DrawingWindow &window) {
 	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	drawTriangle(CanvasTriangle(p0,p1,p2), Colour(255,255,255), window);
+}
+
+void fillHalfTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
+	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1());
+	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2());
+	for (int i = 0; i < line1.size(); i++) {
+		for (int j = 0; j < line2.size(); j++) {
+			if (line1[i].y == line2[j].y) {
+				drawLine(line1[i], line2[j], colour, window);
+			}
+		}
+	}
+}
+
+void fillTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
+	//initialise vertices
+	CanvasPoint top = triangle.v0();
+	CanvasPoint mid = triangle.v1();
+	CanvasPoint bot = triangle.v2();
+
+	//bubble sort by y pos
+	if (bot.y < mid.y) {
+		std::swap(bot, mid);
+	}
+	if (mid.y < top.y) {
+		std::swap(mid, top);
+	}
+	if (bot.y < mid.y) {
+		std::swap(bot, mid);
+	}
+
+	//find opposite x by using the ratio from top to mid y and multiplying it by the distance between
+	//bot and top x and adding to the top x
+	float opx = top.x + (mid.y - top.y) / (bot.y - top.y) * (bot.x - top.x);
+	CanvasPoint opMid = CanvasPoint(opx, mid.y);
+	CanvasTriangle topTriangle = CanvasTriangle(top, mid, opMid);
+	CanvasTriangle botTriangle = CanvasTriangle(bot, mid, opMid);
+
+	fillHalfTriangle(topTriangle, colour, window);
+	fillHalfTriangle(botTriangle, colour, window);
+	drawTriangle(triangle, Colour(255,255,255), window);
+}
+
+void drawFillTriangle(DrawingWindow &window) {
+	CanvasPoint p0 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
+	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
+	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
+	CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
+	fillTriangle(triangle, Colour(rand() % 256,rand() % 256,rand() % 256), window);
+}
+
+void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWindow &window) {
+	std::vector<TexturePoint> pixelsOnTexture = pixelsOnTextureLine(from.texturePoint, to.texturePoint);
+	int sizeOfLine = to.x - from.x;
+	std::cout << "TEST" << std::endl;
+	for (float i = 0; i < sizeOfLine; i++) {
+		int texturePixel = round(i / sizeOfLine * pixelsOnTexture.size());
+		window.setPixelColour(from.x + i, from.y, texture.pixels[pixelsOnTexture[texturePixel].x + pixelsOnTexture[texturePixel].y * texture.width]);
+	}
+}
+
+void textureHalfTriangle(CanvasTriangle triangle, TextureMap texture, DrawingWindow &window) {
+	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1());
+	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2());
+	for (int i = 0; i < line1.size(); i++) {
+		for (int j = 0; j < line2.size(); j++) {
+			if (line1[i].y == line2[j].y) {
+				float line1ratio = float(i) / line1.size();
+				float line2ratio = float(j) / line2.size();
+				float texturepoint1x = triangle.v0().texturePoint.x + (triangle.v1().texturePoint.x - triangle.v0().texturePoint.x) * line1ratio;
+				float texturepoint1y = triangle.v0().texturePoint.y + (triangle.v1().texturePoint.y - triangle.v0().texturePoint.y) * line1ratio;
+				float texturepoint2x = triangle.v0().texturePoint.x + (triangle.v2().texturePoint.x - triangle.v0().texturePoint.x) * line2ratio;
+				float texturepoint2y = triangle.v0().texturePoint.y + (triangle.v2().texturePoint.y - triangle.v0().texturePoint.y) * line2ratio;
+				line1[i].texturePoint = TexturePoint(texturepoint1x, texturepoint1y);
+				line2[j].texturePoint = TexturePoint(texturepoint2x, texturepoint2y);
+				textureLine(line1[i], line2[j], texture, window);
+			}
+		}
+	}
+}
+
+void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow &window) {
+	//initialise vertices
+	CanvasPoint top = triangle.v0();
+	CanvasPoint mid = triangle.v1();
+	CanvasPoint bot = triangle.v2();
+
+	//bubble sort by y pos
+	if (bot.y < mid.y) {
+		std::swap(bot, mid);
+	}
+	if (mid.y < top.y) {
+		std::swap(mid, top);
+	}
+	if (bot.y < mid.y) {
+		std::swap(bot, mid);
+	}
+
+	//find opposite x by using the ratio from top to mid y and multiplying it by the distance between
+	//bot and top x and adding to the top x
+	float opx = top.x + (mid.y - top.y) / (bot.y - top.y) * (bot.x - top.x);
+	CanvasPoint opMid = CanvasPoint(opx, mid.y);
+
+	//find corresponding texturepoint for the new midpoint
+	float ratio = (opMid.y - top.y) / (bot.y - top.y);
+	opMid.texturePoint.x = top.texturePoint.x + ratio * (bot.texturePoint.x - top.texturePoint.x);
+	opMid.texturePoint.y = top.texturePoint.y + ratio * (bot.texturePoint.y - top.texturePoint.y);
+
+	CanvasTriangle topTriangle = CanvasTriangle(top, mid, opMid);
+	CanvasTriangle botTriangle = CanvasTriangle(bot, mid, opMid);
+
+	textureHalfTriangle(topTriangle, texture, window);
+	textureHalfTriangle(botTriangle, texture, window);
+	drawTriangle(triangle, Colour(255,255,255), window);
 }
 
 void draw(DrawingWindow &window) {
@@ -87,6 +233,23 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
 		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
 		else if (event.key.keysym.sym == SDLK_u) randomTriangle(window);
+		else if (event.key.keysym.sym == SDLK_f) drawFillTriangle(window);
+		else if (event.key.keysym.sym == SDLK_t) {
+			TextureMap texture = TextureMap("../assets/texture.ppm");
+			CanvasPoint p0 = CanvasPoint(160, 10);
+			CanvasPoint p1 = CanvasPoint(300, 230);
+			CanvasPoint p2 = CanvasPoint(10, 150);
+			p0.texturePoint = TexturePoint(195,5);
+			p1.texturePoint = TexturePoint(395,380);
+			p2.texturePoint = TexturePoint(65,330);
+
+			std::cout << "TEST";
+
+			CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
+			textureTriangle(texture, triangle, window);
+
+
+		}
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
 		window.savePPM("output.ppm");
 		window.saveBMP("output.bmp");
