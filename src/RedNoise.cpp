@@ -17,82 +17,6 @@
 #define WIDTH 320
 #define HEIGHT 240
 
-//parses obj files returning vector<ModelTriangle> with all vertices of each triangle
-std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours) {
-	std::ifstream File(filename);
-	std::string line;
-
-	std::vector<ModelTriangle> triangles;
-	std::vector<glm::vec3> vertices;
-	std::string colour;
-
-	while (std::getline(File, line)) {
-		if (line == "") continue;
-		std::vector<std::string> values = split(line, ' ');
-		if (values[0] == "v") {
-			glm::vec3 vertex(std::stof(values[1]) * scale, std::stof(values[2]) * scale,
-			std::stof(values[3]) * scale);
-			vertices.push_back(vertex);
-		} else if (values[0] == "f") {
-			triangles.push_back(ModelTriangle(vertices[std::stoi(values[1])-1],
-			vertices[std::stoi(values[2])-1], vertices[std::stoi(values[3])-1], colours[colour]));
-		} else if (values[0] == "usemtl") {
-			colour = values[1];
-		}
-	}
-	File.close();
-	std::cout << vertices.size() << " vertices" << std::endl;
-	std::cout << triangles.size() << " triangles" << std::endl;
-	return triangles;
-}
-
-//parses mtl files and creates a hash table pairing colour names to colour values
-std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
-	std::ifstream File(filename);
-	std::string line;
-
-	std::unordered_map<std::string, Colour> colours;
-	std::string colour;
-
-	while (std::getline(File, line)) {
-		if (line == "") continue;
-
-		std::vector<std::string> values = split(line, ' ');
-		if (values[0] == "newmtl") {
-			colour = values[1];
-		} else if (values[0] == "Kd") {
-			colours.insert({colour, Colour(int(stof(values[1]) * 255),
-			int(stof(values[2]) * 255), int(stof(values[3]) * 255))});
-		}
-	}
-	File.close();
-	return colours;
-}
-
-CanvasPoint projectVertexOntoCanvasPoint(glm::vec3 cameraPosition, float focalLength, glm::vec3 vertexPosition) {
-	float u = -focalLength * ((vertexPosition.x - cameraPosition.x) / (vertexPosition.z - cameraPosition.z)) * 160 + WIDTH / 2;
-	float v = focalLength * ((vertexPosition.y - cameraPosition.y) / (vertexPosition.z - cameraPosition.z)) * 160 + HEIGHT / 2;
-	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v));
-	return projectedVertex;
-}
-
-void pointCloud(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
-	Colour colour = Colour(255,255,255);
-	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
-	for (int i = 0; i < modelTriangles.size(); i++) {
-		ModelTriangle triangle = modelTriangles[i];
-		for (int j = 0; j < triangle.vertices.size() ; j++) {
-			CanvasPoint point = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[j]);
-			window.setPixelColour(point.x, point.y, c);
-		}
-	}
-}
-
-void wireFrameRender() {
-
-}
-
-
 std::vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
 	std::vector<float> result;
 	float step = (to - from) / (numberOfValues - 1);
@@ -290,6 +214,91 @@ void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow 
 	drawTriangle(triangle, Colour(255,255,255), window);
 }
 
+//parses obj files returning vector<ModelTriangle> with all vertices of each triangle
+std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours) {
+	std::ifstream File(filename);
+	std::string line;
+
+	std::vector<ModelTriangle> triangles;
+	std::vector<glm::vec3> vertices;
+	std::string colour;
+
+	while (std::getline(File, line)) {
+		if (line == "") continue;
+		std::vector<std::string> values = split(line, ' ');
+		if (values[0] == "v") {
+			glm::vec3 vertex(std::stof(values[1]) * scale, std::stof(values[2]) * scale,
+			std::stof(values[3]) * scale);
+			vertices.push_back(vertex);
+		} else if (values[0] == "f") {
+			triangles.push_back(ModelTriangle(vertices[std::stoi(values[1])-1],
+			vertices[std::stoi(values[2])-1], vertices[std::stoi(values[3])-1], colours[colour]));
+		} else if (values[0] == "usemtl") {
+			colour = values[1];
+		}
+	}
+	File.close();
+	std::cout << vertices.size() << " vertices" << std::endl;
+	std::cout << triangles.size() << " triangles" << std::endl;
+	return triangles;
+}
+
+//parses mtl files and creates a hash table pairing colour names to colour values
+std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
+	std::ifstream File(filename);
+	std::string line;
+
+	std::unordered_map<std::string, Colour> colours;
+	std::string colour;
+
+	while (std::getline(File, line)) {
+		if (line == "") continue;
+
+		std::vector<std::string> values = split(line, ' ');
+		if (values[0] == "newmtl") {
+			colour = values[1];
+		} else if (values[0] == "Kd") {
+			colours.insert({colour, Colour(int(stof(values[1]) * 255),
+			int(stof(values[2]) * 255), int(stof(values[3]) * 255))});
+		}
+	}
+	File.close();
+	return colours;
+}
+
+CanvasPoint projectVertexOntoCanvasPoint(glm::vec3 cameraPosition, float focalLength, glm::vec3 vertexPosition) {
+	float u = -focalLength * ((vertexPosition.x - cameraPosition.x) / (vertexPosition.z - cameraPosition.z)) * 160 + WIDTH / 2;
+	float v = focalLength * ((vertexPosition.y - cameraPosition.y) / (vertexPosition.z - cameraPosition.z)) * 160 + HEIGHT / 2;
+	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v));
+	return projectedVertex;
+}
+
+void pointCloud(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
+	Colour colour = Colour(255,255,255);
+	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+	for (int i = 0; i < modelTriangles.size(); i++) {
+		ModelTriangle triangle = modelTriangles[i];
+		for (int j = 0; j < triangle.vertices.size() ; j++) {
+			CanvasPoint point = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[j]);
+			window.setPixelColour(point.x, point.y, c);
+		}
+	}
+}
+
+void wireFrameRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
+	Colour colour = Colour(255,255,255);
+	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+	for (int i = 0; i < modelTriangles.size(); i++) {
+		ModelTriangle triangle = modelTriangles[i];
+		CanvasPoint p0 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[0]);
+		CanvasPoint p1 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[1]);
+		CanvasPoint p2 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[2]);
+		drawLine(p0, p1, colour, window);
+		drawLine(p1, p2, colour, window);
+		drawLine(p2, p0, colour, window);
+	}
+}
+
 void draw(DrawingWindow &window) {
 	window.clearPixels();
 	for (size_t y = 0; y < window.height; y++) {
@@ -336,7 +345,7 @@ int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 	//draw(window);
-	pointCloud(cameraPosition, 2.0, window, modelTriangles);
+	wireFrameRender(cameraPosition, 2.0, window, modelTriangles);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
