@@ -55,17 +55,40 @@ void drawLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindow &wi
 	}
 }
 
-std::vector<CanvasPoint> pixelsOnLine(CanvasPoint from, CanvasPoint to) {
-	std::vector<CanvasPoint> pixels;
+void drawDepthLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
+	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
 	float xDiff = to.x - from.x;
 	float yDiff = to.y - from.y;
+	float dDiff = to.depth - from.depth;
 	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
 	float xStepSize = xDiff / numberOfSteps;
 	float yStepSize = yDiff / numberOfSteps;
+	float dStepSize = dDiff / numberOfSteps;
 	for (float i = 0.0; i <= numberOfSteps; i++) {
 		float x = from.x + (i * xStepSize);
 		float y = from.y + (i * yStepSize);
-		CanvasPoint pixel = CanvasPoint(round(x), round(y));
+		float d = from.depth + (i * dStepSize);
+		if (-1/d > depthBuffer[round(x)][round(y)]) {
+			depthBuffer[round(x)][round(y)] = -1/d;
+			window.setPixelColour(round(x), round(y), c);
+		}
+	}
+}
+
+std::vector<CanvasPoint> pixelsOnLine(CanvasPoint from, CanvasPoint to, std::vector<std::vector<float>> &depthBuffer) {
+	std::vector<CanvasPoint> pixels;
+	float xDiff = to.x - from.x;
+	float yDiff = to.y - from.y;
+	float dDiff = to.depth - from.depth;
+	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
+	float xStepSize = xDiff / numberOfSteps;
+	float yStepSize = yDiff / numberOfSteps;
+	float dStepSize = dDiff / numberOfSteps;
+	for (float i = 0.0; i <= numberOfSteps; i++) {
+		float x = from.x + (i * xStepSize);
+		float y = from.y + (i * yStepSize);
+		float d = from.depth + (i * dStepSize);
+		CanvasPoint pixel = CanvasPoint(round(x), round(y), d);
 		pixels.push_back(pixel);
 	}
 	return pixels;
@@ -87,32 +110,32 @@ std::vector<TexturePoint> pixelsOnTextureLine(TexturePoint from, TexturePoint to
 	return pixels;
 }
 
-void drawTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
-	drawLine(triangle.v0(), triangle.v1(), colour, window);
-	drawLine(triangle.v1(), triangle.v2(), colour, window);
-	drawLine(triangle.v2(), triangle.v0(), colour, window);
+void drawTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
+	drawDepthLine(triangle.v0(), triangle.v1(), colour, window, depthBuffer);
+	drawDepthLine(triangle.v1(), triangle.v2(), colour, window, depthBuffer);
+	drawDepthLine(triangle.v2(), triangle.v0(), colour, window, depthBuffer);
 }
 
-void randomTriangle(DrawingWindow &window) {
+void randomTriangle(DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
 	CanvasPoint p0 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	drawTriangle(CanvasTriangle(p0,p1,p2), Colour(255,255,255), window);
+	drawTriangle(CanvasTriangle(p0,p1,p2), Colour(255,255,255), window, depthBuffer);
 }
 
-void fillHalfTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
-	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1());
-	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2());
+void fillHalfTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
+	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1(), depthBuffer);
+	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2(), depthBuffer);
 	for (int i = 0; i < line1.size(); i++) {
 		for (int j = 0; j < line2.size(); j++) {
 			if (line1[i].y == line2[j].y) {
-				drawLine(line1[i], line2[j], colour, window);
+				drawDepthLine(line1[i], line2[j], colour, window, depthBuffer);
 			}
 		}
 	}
 }
 
-void fillTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window) {
+void fillTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
 	//initialise vertices
 	CanvasPoint top = triangle.v0();
 	CanvasPoint mid = triangle.v1();
@@ -133,20 +156,23 @@ void fillTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window)
 	//bot and top x and adding to the top x
 	float opx = top.x + (mid.y - top.y) / (bot.y - top.y) * (bot.x - top.x);
 	CanvasPoint opMid = CanvasPoint(opx, mid.y);
+	//find depth value of oposite mid point
+	opMid.depth = top.depth + (mid.y - top.y) / (bot.y - top.y) * (bot.depth - top.depth);
+	std::cout << opMid.depth << std::endl;
 	CanvasTriangle topTriangle = CanvasTriangle(top, mid, opMid);
 	CanvasTriangle botTriangle = CanvasTriangle(bot, mid, opMid);
 
-	fillHalfTriangle(topTriangle, colour, window);
-	fillHalfTriangle(botTriangle, colour, window);
-	drawTriangle(triangle, Colour(255,255,255), window);
+	fillHalfTriangle(topTriangle, colour, window, depthBuffer);
+	fillHalfTriangle(botTriangle, colour, window, depthBuffer);
+	// drawTriangle(triangle, Colour(255,255,255), window);
 }
 
-void drawFillTriangle(DrawingWindow &window) {
+void drawFillTriangle(DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
 	CanvasPoint p0 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
 	CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
-	fillTriangle(triangle, Colour(rand() % 256,rand() % 256,rand() % 256), window);
+	fillTriangle(triangle, Colour(rand() % 256,rand() % 256,rand() % 256), window, depthBuffer);
 }
 
 void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWindow &window) {
@@ -159,9 +185,9 @@ void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWi
 	}
 }
 
-void textureHalfTriangle(CanvasTriangle triangle, TextureMap texture, DrawingWindow &window) {
-	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1());
-	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2());
+void textureHalfTriangle(CanvasTriangle triangle, TextureMap texture, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
+	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1(), depthBuffer);
+	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2(), depthBuffer);
 	for (int i = 0; i < line1.size(); i++) {
 		for (int j = 0; j < line2.size(); j++) {
 			if (line1[i].y == line2[j].y) {
@@ -179,7 +205,7 @@ void textureHalfTriangle(CanvasTriangle triangle, TextureMap texture, DrawingWin
 	}
 }
 
-void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow &window) {
+void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
 	//initialise vertices
 	CanvasPoint top = triangle.v0();
 	CanvasPoint mid = triangle.v1();
@@ -209,9 +235,9 @@ void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow 
 	CanvasTriangle topTriangle = CanvasTriangle(top, mid, opMid);
 	CanvasTriangle botTriangle = CanvasTriangle(bot, mid, opMid);
 
-	textureHalfTriangle(topTriangle, texture, window);
-	textureHalfTriangle(botTriangle, texture, window);
-	drawTriangle(triangle, Colour(255,255,255), window);
+	textureHalfTriangle(topTriangle, texture, window, depthBuffer);
+	textureHalfTriangle(botTriangle, texture, window, depthBuffer);
+	drawTriangle(triangle, Colour(255,255,255), window, depthBuffer);
 }
 
 //parses obj files returning vector<ModelTriangle> with all vertices of each triangle
@@ -269,7 +295,7 @@ std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
 CanvasPoint projectVertexOntoCanvasPoint(glm::vec3 cameraPosition, float focalLength, glm::vec3 vertexPosition) {
 	float u = -focalLength * ((vertexPosition.x - cameraPosition.x) / (vertexPosition.z - cameraPosition.z)) * 160 + WIDTH / 2;
 	float v = focalLength * ((vertexPosition.y - cameraPosition.y) / (vertexPosition.z - cameraPosition.z)) * 160 + HEIGHT / 2;
-	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v));
+	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v), vertexPosition.z - cameraPosition.z);
 	return projectedVertex;
 }
 
@@ -287,7 +313,6 @@ void pointCloud(glm::vec3 cameraPosition, float focalLength, DrawingWindow &wind
 
 void wireFrameRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
 	Colour colour = Colour(255,255,255);
-	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
 	for (int i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
 		CanvasPoint p0 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[0]);
@@ -296,6 +321,19 @@ void wireFrameRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow 
 		drawLine(p0, p1, colour, window);
 		drawLine(p1, p2, colour, window);
 		drawLine(p2, p0, colour, window);
+	}
+}
+
+void rasterisedRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
+	std::vector<std::vector<float>> depthBuffer(window.width, std::vector<float>(window.height, -(std::numeric_limits<float>::infinity())));
+
+	for (int i = 0; i < modelTriangles.size(); i++) {
+		ModelTriangle triangle = modelTriangles[i];
+		CanvasPoint p0 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[0]);
+		CanvasPoint p1 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[1]);
+		CanvasPoint p2 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[2]);
+		CanvasTriangle tri = CanvasTriangle(p0, p1, p2);
+		fillTriangle(tri, triangle.colour, window, depthBuffer);
 	}
 }
 
@@ -318,20 +356,20 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_RIGHT) std::cout << "RIGHT" << std::endl;
 		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
 		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
-		else if (event.key.keysym.sym == SDLK_u) randomTriangle(window);
-		else if (event.key.keysym.sym == SDLK_f) drawFillTriangle(window);
-		else if (event.key.keysym.sym == SDLK_t) {
-			TextureMap texture = TextureMap("../assets/texture.ppm");
-			CanvasPoint p0 = CanvasPoint(160, 10);
-			CanvasPoint p1 = CanvasPoint(300, 230);
-			CanvasPoint p2 = CanvasPoint(10, 150);
-			p0.texturePoint = TexturePoint(195,5);
-			p1.texturePoint = TexturePoint(395,380);
-			p2.texturePoint = TexturePoint(65,330);
-
-			CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
-			textureTriangle(texture, triangle, window);
-		}
+		// else if (event.key.keysym.sym == SDLK_u) randomTriangle(window, depthBuffer);
+		// else if (event.key.keysym.sym == SDLK_f) drawFillTriangle(window, depthBuffer);
+		// else if (event.key.keysym.sym == SDLK_t) {
+		// 	TextureMap texture = TextureMap("../assets/texture.ppm");
+		// 	CanvasPoint p0 = CanvasPoint(160, 10);
+		// 	CanvasPoint p1 = CanvasPoint(300, 230);
+		// 	CanvasPoint p2 = CanvasPoint(10, 150);
+		// 	p0.texturePoint = TexturePoint(195,5);
+		// 	p1.texturePoint = TexturePoint(395,380);
+		// 	p2.texturePoint = TexturePoint(65,330);
+		//
+		// 	CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
+		// 	textureTriangle(texture, triangle, window, depthBuffer);
+		// }
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
 		window.savePPM("output.ppm");
 		window.saveBMP("output.bmp");
@@ -345,7 +383,7 @@ int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 	//draw(window);
-	wireFrameRender(cameraPosition, 2.0, window, modelTriangles);
+	rasterisedRender(cameraPosition, 2.0, window, modelTriangles);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
