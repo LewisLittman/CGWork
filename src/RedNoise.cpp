@@ -9,12 +9,62 @@
 #include <CanvasPoint.h>
 #include <set>
 #include <TextureMap.h>
-
+#include <ModelTriangle.h>
+#include <unordered_map>
 
 #include "Colour.h"
 
 #define WIDTH 320
 #define HEIGHT 240
+
+//parses obj files returning vector<ModelTriangle> with all vertices of each triangle
+std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours) {
+	std::ifstream File(filename);
+	std::string line;
+
+	std::vector<ModelTriangle> triangles;
+	std::vector<glm::vec3> vertices;
+	std::string colour;
+
+	while (std::getline(File, line)) {
+		if (line == "") continue;
+		std::vector<std::string> values = split(line, ' ');
+		if (values[0] == "v") {
+			vertices.push_back(glm::vec3(std::stof(values[1]) * scale, std::stof(values[2]) * scale,
+			std::stof(values[3]) * scale));
+		} else if (values[0] == "f") {
+			triangles.push_back(ModelTriangle(vertices[std::stoi(values[1])-1],
+			vertices[std::stoi(values[2])-1], vertices[std::stoi(values[3])-1], colours[colour]));
+		} else if (values[0] == "usemtl") {
+			colour = values[1];
+		}
+	}
+	File.close();
+	return triangles;
+}
+
+//parses mtl files and creates a hash table pairing colour names to colour values
+std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
+	std::ifstream File(filename);
+	std::string line;
+
+	std::unordered_map<std::string, Colour> colours;
+	std::string colour;
+
+	while (std::getline(File, line)) {
+		if (line == "") continue;
+
+		std::vector<std::string> values = split(line, ' ');
+		if (values[0] == "newmtl") {
+			colour = values[1];
+		} else if (values[0] == "Kd") {
+			colours.insert({colour, Colour(int(stof(values[1])) * 255,
+			int(stof(values[2])) * 255, int(stof(values[3])) * 255)});
+		}
+	}
+	File.close();
+	return colours;
+}
 
 std::vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
 	std::vector<float> result;
@@ -154,8 +204,6 @@ void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWi
 	for (float i = 0; i < sizeOfLine; i++) {
 		int texturePixel = (i / sizeOfLine) * pixelsOnTexture.size();
 		uint32_t colour = texture.pixels[round(pixelsOnTexture[texturePixel].x) + round(pixelsOnTexture[texturePixel].y  * texture.width)];
-		std::cout << texturePixel << std::endl;
-		std::cout << colour << std::endl;
 		window.setPixelColour(from.x + i, from.y, colour);
 	}
 }
@@ -241,11 +289,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 			CanvasPoint p0 = CanvasPoint(160, 10);
 			CanvasPoint p1 = CanvasPoint(300, 230);
 			CanvasPoint p2 = CanvasPoint(10, 150);
-			p0.texturePoint = TexturePoint(9,5);
-			p1.texturePoint = TexturePoint(95,20);
-			p2.texturePoint = TexturePoint(305,330);
-
-			std::cout << "TEST";
+			p0.texturePoint = TexturePoint(195,5);
+			p1.texturePoint = TexturePoint(395,380);
+			p2.texturePoint = TexturePoint(65,330);
 
 			CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
 			textureTriangle(texture, triangle, window);
