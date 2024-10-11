@@ -11,11 +11,19 @@
 #include <TextureMap.h>
 #include <ModelTriangle.h>
 #include <unordered_map>
-
 #include "Colour.h"
+#include "camera.h"
 
-#define WIDTH 320
-#define HEIGHT 240
+#define WIDTH 500
+#define HEIGHT 500
+
+using namespace glm;
+using namespace std;
+
+vec3 cameraPosition;
+mat3 cameraOrientation = mat3(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
+const double PI = 3.14159265358979323846;
+
 
 std::vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
 	std::vector<float> result;
@@ -289,20 +297,22 @@ std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
 	return colours;
 }
 
-CanvasPoint projectVertexOntoCanvasPoint(glm::vec3 cameraPosition, float focalLength, glm::vec3 vertexPosition) {
-	float u = -focalLength * ((vertexPosition.x - cameraPosition.x) / (vertexPosition.z - cameraPosition.z)) * 160 + WIDTH / 2;
-	float v = focalLength * ((vertexPosition.y - cameraPosition.y) / (vertexPosition.z - cameraPosition.z)) * 160 + HEIGHT / 2;
-	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v), cameraPosition.z - vertexPosition.z);
+CanvasPoint projectVertexOntoCanvasPoint(float focalLength, glm::vec3 vertexPosition) {
+	vec3 cameraToVertex = vec3(vertexPosition.x - cameraPosition.x, vertexPosition.y - cameraPosition.y, vertexPosition.z - cameraPosition.z);
+	vec3 adjustedVector = cameraToVertex * cameraOrientation;
+	float u = -focalLength * (adjustedVector.x / adjustedVector.z) * 100 + WIDTH / 2;
+	float v = focalLength * (adjustedVector.y / adjustedVector.z) * 100 + HEIGHT / 2;
+	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v), adjustedVector.z);
 	return projectedVertex;
 }
 
-void pointCloud(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
+void pointCloud(float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
 	Colour colour = Colour(255,255,255);
 	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
 	for (int i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
 		for (int j = 0; j < triangle.vertices.size() ; j++) {
-			CanvasPoint point = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[j]);
+			CanvasPoint point = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[j]);
 			window.setPixelColour(point.x, point.y, c);
 		}
 	}
@@ -312,23 +322,23 @@ void wireFrameRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow 
 	Colour colour = Colour(255,255,255);
 	for (int i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
-		CanvasPoint p0 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[0]);
-		CanvasPoint p1 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[1]);
-		CanvasPoint p2 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[2]);
+		CanvasPoint p0 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[0]);
+		CanvasPoint p1 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[1]);
+		CanvasPoint p2 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[2]);
 		drawLine(p0, p1, colour, window);
 		drawLine(p1, p2, colour, window);
 		drawLine(p2, p0, colour, window);
 	}
 }
 
-void rasterisedRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
+void rasterisedRender(float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
 	std::vector<std::vector<float>> depthBuffer(window.width, std::vector<float>(window.height, 0.0));
 
 	for (int i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
-		CanvasPoint p0 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[0]);
-		CanvasPoint p1 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[1]);
-		CanvasPoint p2 = projectVertexOntoCanvasPoint(cameraPosition, focalLength, triangle.vertices[2]);
+		CanvasPoint p0 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[0]);
+		CanvasPoint p1 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[1]);
+		CanvasPoint p2 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[2]);
 		CanvasTriangle tri = CanvasTriangle(p0, p1, p2);
 		fillTriangle(tri, triangle.colour, window, depthBuffer);
 	}
@@ -336,23 +346,27 @@ void rasterisedRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
-	for (size_t y = 0; y < window.height; y++) {
-		for (size_t x = 0; x < window.width; x++) {
-			float red = 250;
-			float green = 0.0;
-			float blue = 255;
-			uint32_t colour = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue);
-			window.setPixelColour(x, y, colour);
-		}
-	}
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
 		if (event.key.keysym.sym == SDLK_LEFT) std::cout << "LEFT" << std::endl;
 		else if (event.key.keysym.sym == SDLK_RIGHT) std::cout << "RIGHT" << std::endl;
-		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
-		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
+		else if (event.key.keysym.sym == SDLK_UP) cameraPosition.y += 0.1;
+		else if (event.key.keysym.sym == SDLK_DOWN) cameraPosition.y -= 0.1;
+		else if (event.key.keysym.sym == SDLK_w) cameraPosition.z -= 0.1;
+		else if (event.key.keysym.sym == SDLK_s) cameraPosition.z += 0.1;
+		else if (event.key.keysym.sym == SDLK_a) cameraPosition.x -= 0.1;
+		else if (event.key.keysym.sym == SDLK_d) cameraPosition.x += 0.1;
+		else if (event.key.keysym.sym == SDLK_r) reset_camera();
+		else if (event.key.keysym.sym == SDLK_1) cameraPosition = cameraPosition * rot_y_axis(-PI/180);
+		else if (event.key.keysym.sym == SDLK_2) cameraPosition = cameraPosition * rot_y_axis(PI/180);
+		else if (event.key.keysym.sym == SDLK_3) cameraPosition = cameraPosition * rot_x_axis(-PI/180);
+		else if (event.key.keysym.sym == SDLK_4) cameraPosition = cameraPosition * rot_x_axis(PI/180);
+		else if (event.key.keysym.sym == SDLK_q) cameraOrientation = cameraOrientation * rot_y_axis(-PI/180);
+		else if (event.key.keysym.sym == SDLK_e) cameraOrientation = cameraOrientation * rot_y_axis(PI/180);
+		else if (event.key.keysym.sym == SDLK_z) cameraOrientation = cameraOrientation * rot_x_axis(-PI/180);
+		else if (event.key.keysym.sym == SDLK_x) cameraOrientation = cameraOrientation * rot_x_axis(-PI/180);
 		// else if (event.key.keysym.sym == SDLK_u) randomTriangle(window, depthBuffer);
 		// else if (event.key.keysym.sym == SDLK_f) drawFillTriangle(window, depthBuffer);
 		// else if (event.key.keysym.sym == SDLK_t) {
@@ -374,16 +388,16 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 }
 
 int main(int argc, char *argv[]) {
-	glm::vec3 cameraPosition = glm::vec3(0, 0, 4.0);
+	reset_camera();
 	std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.35, parseMtl("../models/cornell-box.mtl"));
 
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
-	//draw(window);
-	rasterisedRender(cameraPosition, 2.0, window, modelTriangles);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
+		draw(window);
+		rasterisedRender(2.0, window, modelTriangles);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}
