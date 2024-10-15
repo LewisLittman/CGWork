@@ -21,9 +21,10 @@ using namespace glm;
 using namespace std;
 
 vec3 cameraPosition;
-mat3 cameraOrientation = mat3(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
+mat3 cameraOrientation;
 const double PI = 3.14159265358979323846;
-
+bool orbiting;
+float focalLength;
 
 std::vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
 	std::vector<float> result;
@@ -76,9 +77,11 @@ void drawDepthLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindo
 		float x = from.x + (i * xStepSize);
 		float y = from.y + (i * yStepSize);
 		float d = from.depth + (i * dStepSize);
-		if (1/d > depthBuffer[round(x)][round(y)]) {
-			depthBuffer[round(x)][round(y)] = 1/d;
-			window.setPixelColour(round(x), round(y), c);
+		if(x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+			if (d > depthBuffer[round(x)][round(y)]) {
+				depthBuffer[round(x)][round(y)] = d;
+				window.setPixelColour(round(x), round(y), c);
+			}
 		}
 	}
 }
@@ -124,18 +127,11 @@ void drawTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window,
 	drawDepthLine(triangle.v2(), triangle.v0(), colour, window, depthBuffer);
 }
 
-void randomTriangle(DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
-	CanvasPoint p0 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	drawTriangle(CanvasTriangle(p0,p1,p2), Colour(255,255,255), window, depthBuffer);
-}
-
 void fillHalfTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
 	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1());
 	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2());
-	for (int i = 0; i < line1.size(); i++) {
-		for (int j = 0; j < line2.size(); j++) {
+	for (size_t i = 0; i < line1.size(); i++) {
+		for (size_t j = 0; j < line2.size(); j++) {
 			if (line1[i].y == line2[j].y) {
 				drawDepthLine(line1[i], line2[j], colour, window, depthBuffer);
 			}
@@ -164,22 +160,13 @@ void fillTriangle(CanvasTriangle triangle, Colour colour, DrawingWindow &window,
 	//bot and top x and adding to the top x
 	float opx = top.x + (mid.y - top.y) / (bot.y - top.y) * (bot.x - top.x);
 	CanvasPoint opMid = CanvasPoint(opx, mid.y);
-	//find depth value of oposite mid point
+	//find depth value of opposite mid point
 	opMid.depth = top.depth + (mid.y - top.y) / (bot.y - top.y) * (bot.depth - top.depth);
 	CanvasTriangle topTriangle = CanvasTriangle(top, mid, opMid);
 	CanvasTriangle botTriangle = CanvasTriangle(bot, mid, opMid);
 
 	fillHalfTriangle(topTriangle, colour, window, depthBuffer);
 	fillHalfTriangle(botTriangle, colour, window, depthBuffer);
-	// drawTriangle(triangle, Colour(255,255,255), window);
-}
-
-void drawFillTriangle(DrawingWindow &window, std::vector<std::vector<float>> &depthBuffer) {
-	CanvasPoint p0 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	CanvasPoint p1 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	CanvasPoint p2 = CanvasPoint(rand() % WIDTH, rand() % HEIGHT);
-	CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
-	fillTriangle(triangle, Colour(rand() % 256,rand() % 256,rand() % 256), window, depthBuffer);
 }
 
 void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWindow &window) {
@@ -195,8 +182,8 @@ void textureLine(CanvasPoint from, CanvasPoint to, TextureMap texture, DrawingWi
 void textureHalfTriangle(CanvasTriangle triangle, TextureMap texture, DrawingWindow &window) {
 	std::vector<CanvasPoint> line1 = pixelsOnLine(triangle.v0(), triangle.v1());
 	std::vector<CanvasPoint> line2 = pixelsOnLine(triangle.v0(), triangle.v2());
-	for (int i = 0; i < line1.size(); i++) {
-		for (int j = 0; j < line2.size(); j++) {
+	for (size_t i = 0; i < line1.size(); i++) {
+		for (size_t j = 0; j < line2.size(); j++) {
 			if (line1[i].y == line2[j].y) {
 				float line1ratio = float(i) / line1.size();
 				float line2ratio = float(j) / line2.size();
@@ -297,30 +284,30 @@ std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
 	return colours;
 }
 
-CanvasPoint projectVertexOntoCanvasPoint(float focalLength, glm::vec3 vertexPosition) {
-	vec3 cameraToVertex = vec3(vertexPosition.x - cameraPosition.x, vertexPosition.y - cameraPosition.y, vertexPosition.z - cameraPosition.z);
-	vec3 adjustedVector = cameraToVertex * cameraOrientation;
+CanvasPoint projectVertexOntoCanvasPoint(float focalLength, vec3 vertexPosition) {
+	vec3 cameraToVertex = cameraPosition - vertexPosition;
+	vec3 adjustedVector =  cameraToVertex * cameraOrientation;
 	float u = -focalLength * (adjustedVector.x / adjustedVector.z) * 100 + WIDTH / 2;
 	float v = focalLength * (adjustedVector.y / adjustedVector.z) * 100 + HEIGHT / 2;
-	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v), adjustedVector.z);
+	CanvasPoint projectedVertex = CanvasPoint(round(u), round(v), 1/adjustedVector.z);
 	return projectedVertex;
 }
 
 void pointCloud(float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
 	Colour colour = Colour(255,255,255);
 	uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
-	for (int i = 0; i < modelTriangles.size(); i++) {
+	for (size_t i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
-		for (int j = 0; j < triangle.vertices.size() ; j++) {
+		for (size_t j = 0; j < triangle.vertices.size() ; j++) {
 			CanvasPoint point = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[j]);
 			window.setPixelColour(point.x, point.y, c);
 		}
 	}
 }
 
-void wireFrameRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
+void wireFrameRender(float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
 	Colour colour = Colour(255,255,255);
-	for (int i = 0; i < modelTriangles.size(); i++) {
+	for (size_t i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
 		CanvasPoint p0 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[0]);
 		CanvasPoint p1 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[1]);
@@ -333,8 +320,7 @@ void wireFrameRender(glm::vec3 cameraPosition, float focalLength, DrawingWindow 
 
 void rasterisedRender(float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
 	std::vector<std::vector<float>> depthBuffer(window.width, std::vector<float>(window.height, 0.0));
-
-	for (int i = 0; i < modelTriangles.size(); i++) {
+	for (size_t i = 0; i < modelTriangles.size(); i++) {
 		ModelTriangle triangle = modelTriangles[i];
 		CanvasPoint p0 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[0]);
 		CanvasPoint p1 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[1]);
@@ -346,6 +332,7 @@ void rasterisedRender(float focalLength, DrawingWindow &window, std::vector<Mode
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
+	orbit(orbiting);
 }
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
@@ -359,28 +346,15 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_a) cameraPosition.x -= 0.1;
 		else if (event.key.keysym.sym == SDLK_d) cameraPosition.x += 0.1;
 		else if (event.key.keysym.sym == SDLK_r) reset_camera();
-		else if (event.key.keysym.sym == SDLK_1) cameraPosition = cameraPosition * rot_y_axis(-PI/180);
-		else if (event.key.keysym.sym == SDLK_2) cameraPosition = cameraPosition * rot_y_axis(PI/180);
-		else if (event.key.keysym.sym == SDLK_3) cameraPosition = cameraPosition * rot_x_axis(-PI/180);
-		else if (event.key.keysym.sym == SDLK_4) cameraPosition = cameraPosition * rot_x_axis(PI/180);
-		else if (event.key.keysym.sym == SDLK_q) cameraOrientation = cameraOrientation * rot_y_axis(-PI/180);
-		else if (event.key.keysym.sym == SDLK_e) cameraOrientation = cameraOrientation * rot_y_axis(PI/180);
-		else if (event.key.keysym.sym == SDLK_z) cameraOrientation = cameraOrientation * rot_x_axis(-PI/180);
-		else if (event.key.keysym.sym == SDLK_x) cameraOrientation = cameraOrientation * rot_x_axis(-PI/180);
-		// else if (event.key.keysym.sym == SDLK_u) randomTriangle(window, depthBuffer);
-		// else if (event.key.keysym.sym == SDLK_f) drawFillTriangle(window, depthBuffer);
-		// else if (event.key.keysym.sym == SDLK_t) {
-		// 	TextureMap texture = TextureMap("../assets/texture.ppm");
-		// 	CanvasPoint p0 = CanvasPoint(160, 10);
-		// 	CanvasPoint p1 = CanvasPoint(300, 230);
-		// 	CanvasPoint p2 = CanvasPoint(10, 150);
-		// 	p0.texturePoint = TexturePoint(195,5);
-		// 	p1.texturePoint = TexturePoint(395,380);
-		// 	p2.texturePoint = TexturePoint(65,330);
-		//
-		// 	CanvasTriangle triangle = CanvasTriangle(p0, p1, p2);
-		// 	textureTriangle(texture, triangle, window, depthBuffer);
-		// }
+		else if (event.key.keysym.sym == SDLK_1) cameraPosition = rot_y_axis(-PI/180) * cameraPosition;
+		else if (event.key.keysym.sym == SDLK_2) cameraPosition = rot_y_axis(PI/180) * cameraPosition;
+		else if (event.key.keysym.sym == SDLK_3) cameraPosition = rot_x_axis(-PI/180) * cameraPosition;
+		else if (event.key.keysym.sym == SDLK_4) cameraPosition = rot_x_axis(PI/180) * cameraPosition;
+		else if (event.key.keysym.sym == SDLK_q) cameraOrientation = rot_y_axis(PI/180) * cameraOrientation;
+		else if (event.key.keysym.sym == SDLK_e) cameraOrientation = rot_y_axis(-PI/180) * cameraOrientation;
+		else if (event.key.keysym.sym == SDLK_z) cameraOrientation = rot_x_axis(PI/180) * cameraOrientation;
+		else if (event.key.keysym.sym == SDLK_x) cameraOrientation = rot_x_axis(-PI/180) * cameraOrientation;
+		else if (event.key.keysym.sym == SDLK_o) orbiting = !orbiting;
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
 		window.savePPM("output.ppm");
 		window.saveBMP("output.bmp");
