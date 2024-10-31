@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include "Colour.h"
 #include "camera.h"
+#include "RayTriangleIntersection.h"
 
 #define WIDTH 600
 #define HEIGHT 600
@@ -99,7 +100,7 @@ std::vector<CanvasPoint> pixelsOnLine(CanvasPoint from, CanvasPoint to) {
        float x = from.x + (i * xStepSize);
        float y = from.y + (i * yStepSize);
        float d = from.depth + (i * dStepSize);
-       CanvasPoint pixel = CanvasPoint(round(x), round(y), d);
+       CanvasPoint pixel = CanvasPoint(x, y, d); //removed round statements around x and y
        pixels.push_back(pixel);
     }
     return pixels;
@@ -386,6 +387,45 @@ void rasterisedRender(float focalLength, DrawingWindow &window, std::vector<Mode
     }
 }
 
+RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles) {
+   RayTriangleIntersection rayIntersection;
+
+   for (int i = 0; i < modelTriangles.size(); i++) {
+      ModelTriangle triangle = modelTriangles[i];
+      vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
+      vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
+      vec3 SPVector = cameraPosition - triangle.vertices[0];
+      mat3 DEMatrix(-rayDirection, e0, e1);
+      vec3 possibleSolution = inverse(DEMatrix) * SPVector;
+      float t = possibleSolution.x;
+      float u = possibleSolution.y;
+      float v = possibleSolution.z;
+
+      if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
+         if (t < rayIntersection.distanceFromCamera && t > 0) {
+            rayIntersection.distanceFromCamera = t;
+            rayIntersection.triangleIndex = i;
+            rayIntersection.intersectedTriangle = triangle;
+            rayIntersection.intersectionPoint = rayDirection * t;
+         }
+      }
+   }
+   return rayIntersection;
+}
+
+void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
+   for (int x = 0; x < WIDTH; x++) {
+      for (int y = 0; y < HEIGHT; y++) {
+         vec3 transposedPoint = vec3(x - WIDTH / 2, HEIGHT / 2 - y, focalLength);
+         vec3 rayDirection = transposedPoint - cameraPosition;
+         RayTriangleIntersection closestIntersection = getClosestIntersection(normalize(rayDirection), modelTriangles);
+         Colour colour = closestIntersection.intersectedTriangle.colour;
+         uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+         window.setPixelColour(x, y, c);
+      }
+   }
+}
+
 void draw(DrawingWindow &window) {
     window.clearPixels();
     orbit(orbiting);
@@ -423,11 +463,13 @@ int main(int argc, char *argv[]) {
 
     DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
     SDL_Event event;
+    // rayTraceRender(2.0, window, modelTriangles);
     while (true) {
        // We MUST poll for events - otherwise the window will freeze !
        if (window.pollForInputEvents(event)) handleEvent(event, window);
        draw(window);
-       rasterisedRender(2.0, window, modelTriangles);
+       // rasterisedRender(2.0, window, modelTriangles);
+       rayTraceRender(2.0, window, modelTriangles);
        // Need to render the frame at the end, or nothing actually gets shown on the screen !
        window.renderFrame();
     }
