@@ -30,6 +30,7 @@ const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
 int renderMode;
+// vec3 light = vec3(0, 2.739334, 0);
 
 
 vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
@@ -463,6 +464,38 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
 }
 
 
+bool checkShadow(RayTriangleIntersection intersection, vec3 light, vector<ModelTriangle> modelTriangles) {
+  vec3 ray = light - intersection.intersectionPoint;
+  for (int i = 0; i < modelTriangles.size(); i++) {
+     ModelTriangle triangle = modelTriangles[i];
+     vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
+     vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
+     vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
+     mat3 DEMatrix(normalize(-ray), e0, e1);
+     vec3 possibleSolution = inverse(DEMatrix) * SPVector;
+     float t = possibleSolution.x;
+     float u = possibleSolution.y;
+     float v = possibleSolution.z;
+
+
+     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
+        if (t < length(ray) && t > 0.1 && intersection.triangleIndex != i) {
+           return true;
+        }
+     }
+  }
+  return false;
+}
+
+
+float proximityLighting(RayTriangleIntersection point, vec3 light, float lightStrength) {
+  float distance = length(light - point.intersectionPoint);
+  float intensity = lightStrength / (4 * PI * pow(distance, 2));
+  if (intensity > 1) return 1;
+  return intensity;
+}
+
+
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
   for (int x = 0; x < WIDTH; x++) {
      for (int y = 0; y < HEIGHT; y++) {
@@ -471,9 +504,12 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
         vec3 rayDirection = cameraOrientation * transposedPoint;
         RayTriangleIntersection closestIntersection = getClosestIntersection((rayDirection), modelTriangles);
+        float intensity = proximityLighting(closestIntersection, vec3(0, 1, 0), 20);
         Colour colour = closestIntersection.intersectedTriangle.colour;
-        uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
-        window.setPixelColour(x, y, c);
+        uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
+        uint32_t s = (255 << 24) + (int(colour.red/3) << 16) + (int(colour.green/3) << 8) + int(colour.blue/3);
+        if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) window.setPixelColour(x, y, 00000000);
+        else window.setPixelColour(x, y, c);
      }
   }
 }
@@ -517,7 +553,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 int main(int argc, char *argv[]) {
    reset_camera();
-   std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.7, parseMtl("../models/cornell-box.mtl"));
+   std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"));
 
 
    DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
