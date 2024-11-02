@@ -29,6 +29,7 @@ mat3 cameraOrientation;
 const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
+int renderMode;
 
 
 vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
@@ -465,10 +466,11 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
   for (int x = 0; x < WIDTH; x++) {
      for (int y = 0; y < HEIGHT; y++) {
-        vec3 transposedPoint = vec3(x - WIDTH / 2, HEIGHT / 2 - y, -focalLength);
-        vec3 rayDirection = transposedPoint - cameraPosition;
-        rayDirection = cameraOrientation * rayDirection;
-        RayTriangleIntersection closestIntersection = getClosestIntersection(normalize(rayDirection), modelTriangles);
+        float xT = x - WIDTH / 2;
+        float yT = HEIGHT / 2 - y;
+        vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
+        vec3 rayDirection = cameraOrientation * transposedPoint;
+        RayTriangleIntersection closestIntersection = getClosestIntersection((rayDirection), modelTriangles);
         Colour colour = closestIntersection.intersectedTriangle.colour;
         uint32_t c = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
         window.setPixelColour(x, y, c);
@@ -503,6 +505,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
       else if (event.key.keysym.sym == SDLK_z) cameraOrientation = rot_x_axis(PI/180) * cameraOrientation;
       else if (event.key.keysym.sym == SDLK_x) cameraOrientation = rot_x_axis(-PI/180) * cameraOrientation;
       else if (event.key.keysym.sym == SDLK_o) orbiting = !orbiting;
+      else if (event.key.keysym.sym == SDLK_b) { renderMode = 0; cout << "RenderMode: Wireframe" << endl; }
+      else if (event.key.keysym.sym == SDLK_n) { renderMode = 1; cout << "RenderMode: Rasterised" << endl; }
+      else if (event.key.keysym.sym == SDLK_m) { renderMode = 2; cout << "RenderMode: Ray Tracing" << endl; }
    } else if (event.type == SDL_MOUSEBUTTONDOWN) {
       window.savePPM("output.ppm");
       window.saveBMP("output.bmp");
@@ -512,7 +517,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 int main(int argc, char *argv[]) {
    reset_camera();
-   std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 2, parseMtl("../models/cornell-box.mtl"));
+   std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.7, parseMtl("../models/cornell-box.mtl"));
 
 
    DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
@@ -522,10 +527,13 @@ int main(int argc, char *argv[]) {
       // We MUST poll for events - otherwise the window will freeze !
       if (window.pollForInputEvents(event)) handleEvent(event, window);
       draw(window);
-      // rasterisedRender(2.0, window, modelTriangles);
-      rayTraceRender(200.0, window, modelTriangles);
+      if (renderMode == 0) { wireFrameRender(2.0, window, modelTriangles); }
+      else if (renderMode == 1) { rasterisedRender(2.0, window, modelTriangles); }
+      else if (renderMode == 2) { rayTraceRender(2.0, window, modelTriangles); }
       // Need to render the frame at the end, or nothing actually gets shown on the screen !
       window.renderFrame();
    }
 }
+
+
 

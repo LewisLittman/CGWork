@@ -11,7 +11,7 @@ extern bool orbiting;
 const double PI = 3.14159265358979323846;
 
 void reset_camera() {
-    cameraPosition = vec3(0.0,0.0,10.0);
+    cameraPosition = vec3(0.0,0.0,4.0);
     cameraOrientation = mat3(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
     orbiting = false;
 }
