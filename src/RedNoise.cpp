@@ -519,8 +519,8 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         float intensity = AoILighting(closestIntersection, vec3(0,1,0), 20);
         Colour colour = closestIntersection.intersectedTriangle.colour;
         uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
-        // if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) window.setPixelColour(x, y, 00000000);
-        window.setPixelColour(x, y, c);
+        if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) window.setPixelColour(x, y, 00000000);
+        else window.setPixelColour(x, y, c);
      }
   }
 }
