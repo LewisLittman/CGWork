@@ -483,7 +483,7 @@ bool checkShadow(RayTriangleIntersection intersection, vec3 light, vector<ModelT
 
 
      if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-        if (t < length(ray) && t > 0.1 && intersection.triangleIndex != i) {
+        if (t < length(ray) && t > 0.05 && intersection.triangleIndex != i) {
            return true;
         }
      }
@@ -499,13 +499,31 @@ float proximityLighting(RayTriangleIntersection point, vec3 light, float lightSt
   return intensity;
 }
 
-float AoILighting(RayTriangleIntersection point, vec3 light, float lightStrength) {
+float AoILighting(RayTriangleIntersection point, vec3 light) {
    vec3 lightRay = normalize(vec3(light - point.intersectionPoint));
    float intensity = dot(lightRay, point.intersectedTriangle.normal);
    if (intensity < 0) return 0;
    return intensity;
 }
 
+float specularLighting(RayTriangleIntersection point, vec3 light) {
+   vec3 lightRay = normalize(vec3(point.intersectionPoint - light));
+   vec3 reflectionRay = normalize(lightRay - 2 * point.intersectedTriangle.normal * dot(light, point.intersectedTriangle.normal));
+   vec3 viewRay = normalize(cameraPosition - point.intersectionPoint);
+   float intensity = dot(viewRay, reflectionRay);
+   if (intensity < 0) return 0;
+   return intensity;
+}
+
+float combinedLighting(RayTriangleIntersection point) {
+   float proximityLightingIntensity = proximityLighting(point, vec3(0, 1, 0), 20);
+   float AoILightIntensity = AoILighting(point, vec3(0, 1, 0));
+   float specularLightingIntensity = specularLighting(point, vec3(0, 1, 0));
+   float combinedIntensity = 0.4 * proximityLightingIntensity + 0.7 * AoILightIntensity + 0.5 * specularLightingIntensity;
+   if (combinedIntensity < 0.2) return 0.2;
+   if (combinedIntensity > 1) return 1;
+   return combinedIntensity;
+}
 
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
   for (int x = 0; x < WIDTH; x++) {
@@ -516,10 +534,11 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         vec3 rayDirection = cameraOrientation * transposedPoint;
         RayTriangleIntersection closestIntersection = getClosestIntersection((rayDirection), modelTriangles);
         // float intensity = proximityLighting(closestIntersection, vec3(0, 1, 0), 20);
-        float intensity = AoILighting(closestIntersection, vec3(0,1,0), 20);
+        float intensity = combinedLighting(closestIntersection);
         Colour colour = closestIntersection.intersectedTriangle.colour;
         uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
-        if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) window.setPixelColour(x, y, 00000000);
+        uint32_t s = (255 << 24) + (colour.red / 3 << 16) + (colour.green / 3 << 8) + colour.blue / 3;
+        if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) window.setPixelColour(x, y, s);
         else window.setPixelColour(x, y, c);
      }
   }
