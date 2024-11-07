@@ -330,36 +330,62 @@ void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow 
 
 
 //parses obj files returning vector<ModelTriangle> with all vertices of each triangle
-std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours) {
-   std::ifstream File(filename);
-   std::string line;
+std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours, vec3 offset) {
+    std::ifstream File(filename);
+    std::string line;
 
+    std::vector<ModelTriangle> triangles;
+    std::vector<vec3> vertices;
+    std::vector<vec3> vertexNormals; // Parallel vector to store normals for each vertex
+    std::string colour;
 
-   std::vector<ModelTriangle> triangles;
-   std::vector<vec3> vertices;
-   std::string colour;
+    while (std::getline(File, line)) {
+        if (line.empty()) continue;
+        std::vector<std::string> values = split(line, ' ');
+        if (values[0] == "v") {
+            vec3 vertex(stof(values[1]) * scale, stof(values[2]) * scale, stof(values[3]) * scale);
+            vertex += offset;
+            vertices.push_back(vertex);
+            vertexNormals.emplace_back(0.0f, 0.0f, 0.0f); // Initialize normals to zero
+        } else if (values[0] == "f") {
+            int i1 = std::stoi(values[1]) - 1;
+            int i2 = std::stoi(values[2]) - 1;
+            int i3 = std::stoi(values[3]) - 1;
+            ModelTriangle triangle(vertices[i1], vertices[i2], vertices[i3], colours[colour]);
+            triangles.push_back(triangle);
 
+            // Calculate face normal and add it to vertex normals
+            vec3 faceNormal = normalize(cross(vertices[i1] - vertices[i3], vertices[i2] - vertices[i3]));
+            triangles.back().normal = faceNormal;
+            vertexNormals[i1] += faceNormal;
+            vertexNormals[i2] += faceNormal;
+            vertexNormals[i3] += faceNormal;
+        } else if (values[0] == "usemtl") {
+            colour = values[1];
+        }
+    }
+    File.close();
 
-   while (std::getline(File, line)) {
-      if (line == "") continue;
-      std::vector<std::string> values = split(line, ' ');
-      if (values[0] == "v") {
-         vec3 vertex(stof(values[1]) * scale, stof(values[2]) * scale, stof(values[3]) * scale);
-         vertices.push_back(vertex);
-      } else if (values[0] == "f") {
-         triangles.push_back(ModelTriangle(vertices[std::stoi(values[1])-1],
-         vertices[std::stoi(values[2])-1], vertices[std::stoi(values[3])-1], colours[colour]));
-      } else if (values[0] == "usemtl") {
-         colour = values[1];
-      }
-   }
-   File.close();
+    // Normalize all vertex normals
+    for (auto& normal : vertexNormals) {
+        normal = normalize(normal);
+    }
 
-   for(int i = 0; i < triangles.size(); i++) {
-      triangles[i].normal = normalize(cross((triangles[i].vertices[0] - triangles[i].vertices[2]), (triangles[i].vertices[1] - triangles[i].vertices[2])));
-   }
-   return triangles;
+    // Assign calculated normals to each triangle’s vertices
+    for (auto& triangle : triangles) {
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < vertices.size(); ++j) {
+                if (triangle.vertices[i] == vertices[j]) {
+                    triangle.vertexNormals[i] = vertexNormals[j];
+                    break;
+                }
+            }
+        }
+    }
+
+    return triangles;
 }
+
 
 
 //parses mtl files and creates a hash table pairing colour names to colour values
@@ -483,7 +509,7 @@ bool checkShadow(RayTriangleIntersection intersection, vec3 light, vector<ModelT
 
 
      if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-        if (t < length(ray) && t > 0.05 && intersection.triangleIndex != i) {
+        if (t < length(ray) && t > 0.0 && intersection.triangleIndex != i) {
            return true;
         }
      }
@@ -508,9 +534,9 @@ float AoILighting(RayTriangleIntersection point, vec3 light) {
 
 float specularLighting(RayTriangleIntersection point, vec3 light) {
    vec3 lightRay = normalize(vec3(point.intersectionPoint - light));
-   vec3 reflectionRay = normalize(lightRay - 2 * point.intersectedTriangle.normal * dot(light, point.intersectedTriangle.normal));
+   vec3 reflectionRay = normalize(lightRay - 2 * point.intersectedTriangle.normal * dot(lightRay, point.intersectedTriangle.normal));
    vec3 viewRay = normalize(cameraPosition - point.intersectionPoint);
-   float intensity = dot(viewRay, reflectionRay);
+   float intensity = pow(dot(viewRay, reflectionRay), 256);
    if (intensity < 0) return 0;
    return intensity;
 }
@@ -519,10 +545,44 @@ float combinedLighting(RayTriangleIntersection point) {
    float proximityLightingIntensity = proximityLighting(point, vec3(0, 1, 0), 20);
    float AoILightIntensity = AoILighting(point, vec3(0, 1, 0));
    float specularLightingIntensity = specularLighting(point, vec3(0, 1, 0));
-   float combinedIntensity = 0.4 * proximityLightingIntensity + 0.7 * AoILightIntensity + 0.5 * specularLightingIntensity;
+   float combinedIntensity = 0.4 * proximityLightingIntensity + 0.7 * AoILightIntensity + 0.4 * specularLightingIntensity;
    if (combinedIntensity < 0.2) return 0.2;
    if (combinedIntensity > 1) return 1;
    return combinedIntensity;
+}
+
+float brightnessEdgeFunction(vec3 v0, vec3 v1, vec3)
+
+float gourad(RayTriangleIntersection point, vec3 light) {
+   vector<float> brightness;
+   for (int i = 0; i < point.intersectedTriangle.vertices.size(); i++) {
+      //proximity lighting for each vertex
+      float distance = length(light - point.intersectedTriangle.vertices[i]);
+      float proxIntensity = 20 / (4 * PI * distance * distance); //20 = light strength
+      if (proxIntensity > 1) proxIntensity = 1;
+      if (proxIntensity < 0) proxIntensity = 0;
+
+      //AoI lighting for each vertex
+      vec3 AoIlightRay = normalize(vec3(light - point.intersectedTriangle.vertices[i]));
+      float AoIintensity = dot(AoIlightRay, point.intersectedTriangle.vertexNormals[i]);
+      if(AoIintensity > 1) AoIintensity = 1;
+      if (AoIintensity < 0) AoIintensity = 0;
+
+      //Specular lighting for each vertex
+      vec3 specLightRay = normalize(vec3(point.intersectedTriangle.vertices[i] - light));
+      vec3 reflectionRay = normalize(specLightRay - 2 * point.intersectedTriangle.vertexNormals[i] * dot(specLightRay, point.intersectedTriangle.vertexNormals[i]));
+      vec3 viewRay = normalize(cameraPosition - point.intersectedTriangle.vertices[i]);
+      float specIntensity = pow(dot(viewRay, reflectionRay), 256);
+      if (specIntensity > 1) specIntensity = 1;
+      if (specIntensity < 0) specIntensity = 0;
+
+      float combinedIntensity = 0.4 * proxIntensity + 0.7 * AoIintensity + 0.4 * specIntensity;
+      if (combinedIntensity < 0.2) combinedIntensity = 0.2;
+      if (combinedIntensity > 1) combinedIntensity = 1;
+      brightness.push_back(combinedIntensity);
+   }
+
+
 }
 
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
@@ -532,7 +592,7 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         float yT = HEIGHT / 2 - y;
         vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
         vec3 rayDirection = cameraOrientation * transposedPoint;
-        RayTriangleIntersection closestIntersection = getClosestIntersection((rayDirection), modelTriangles);
+        RayTriangleIntersection closestIntersection = getClosestIntersection(normalize(rayDirection), modelTriangles);
         // float intensity = proximityLighting(closestIntersection, vec3(0, 1, 0), 20);
         float intensity = combinedLighting(closestIntersection);
         Colour colour = closestIntersection.intersectedTriangle.colour;
@@ -583,7 +643,11 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 int main(int argc, char *argv[]) {
    reset_camera();
-   std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"));
+   // unordered_map<std::string, Colour> colours = parseMtl("../models/cornell-box.mtl");
+   std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0));
+   vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1));
+   modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
+
 
    DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
    SDL_Event event;
@@ -593,7 +657,9 @@ int main(int argc, char *argv[]) {
       draw(window);
       if (renderMode == 0) { wireFrameRender(2.0, window, modelTriangles); }
       else if (renderMode == 1) { rasterisedRender(2.0, window, modelTriangles); }
-      else if (renderMode == 2) { rayTraceRender(2.0, window, modelTriangles); }
+      else if (renderMode == 2) {
+         rayTraceRender(2.0, window, modelTriangles);
+      }
       // Need to render the frame at the end, or nothing actually gets shown on the screen !
       window.renderFrame();
    }
