@@ -642,7 +642,12 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
           float intensity = phong(reflectionIntersection, vec3(0,1,0));
           Colour colour = reflectionIntersection.intersectedTriangle.colour;
           uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
-          window.setPixelColour(x, y, c);
+          if (checkShadow(reflectionIntersection, vec3(0,1,0), modelTriangles)) {
+            uint32_t s = (255 << 24) + (int(colour.red * 0.2) << 16) + (int(colour.green * 0.2) << 8) + int(colour.blue * 0.2);
+            window.setPixelColour(x, y, s);
+          } else {
+            window.setPixelColour(x, y, c);
+          }
         }
       }
     }
