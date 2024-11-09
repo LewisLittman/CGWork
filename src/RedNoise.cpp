@@ -69,7 +69,9 @@ void drawLine(CanvasPoint from, CanvasPoint to, Colour colour, DrawingWindow &wi
   for (float i = 0.0; i <= numberOfSteps; i++) {
     float x = from.x + (i * xStepSize);
     float y = from.y + (i * yStepSize);
-    window.setPixelColour(round(x), round(y), c);
+    if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) {
+      window.setPixelColour(round(x), round(y), c);
+    }
   }
 }
 
@@ -326,6 +328,9 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           int i3 = std::stoi(values[3]) - 1;
           ModelTriangle triangle(vertices[i1], vertices[i2], vertices[i3], colours[colour]);
           triangle.lighting = lighting;
+          if (colour == "Mirror") {
+            triangle.lighting = "Mirror";
+          }
           triangles.push_back(triangle);
           // Calculate face normal and add it to vertex normals
           vec3 faceNormal = normalize(cross(vertices[i1] - vertices[i3], vertices[i2] - vertices[i3]));
@@ -447,6 +452,34 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
          rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
          rayIntersection.u = u;
          rayIntersection.v = v;
+      }
+    }
+  }
+  return rayIntersection;
+}
+
+RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, RayTriangleIntersection intersection) {
+  RayTriangleIntersection rayIntersection;
+  rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
+  for (int i = 0; i < modelTriangles.size(); i++) {
+    ModelTriangle triangle = modelTriangles[i];
+    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
+    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
+    vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
+    mat3 DEMatrix(-rayDirection, e0, e1);
+    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
+    float t = possibleSolution.x;
+    float u = possibleSolution.y;
+    float v = possibleSolution.z;
+
+    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
+      if (t < rayIntersection.distanceFromCamera && t > 0.01) {
+        rayIntersection.distanceFromCamera = t;
+        rayIntersection.triangleIndex = i;
+        rayIntersection.intersectedTriangle = triangle;
+        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+        rayIntersection.u = u;
+        rayIntersection.v = v;
       }
     }
   }
@@ -575,14 +608,14 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       float xT = x - WIDTH / 2;
       float yT = HEIGHT / 2 - y;
       vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
-      vec3 rayDirection = cameraOrientation * transposedPoint;
-      RayTriangleIntersection closestIntersection = getClosestIntersection(normalize(rayDirection), modelTriangles);
+      vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
+      RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles);
       // float intensity = proximityLighting(closestIntersection, vec3(0, 1, 0), 20);
       // float intensity = combinedLighting(closestIntersection);
       // float intensity = gourad(closestIntersection, vec3(0,1,0));
-      float intensity = phong(closestIntersection, vec3(0,1,0));
+
       if (closestIntersection.intersectedTriangle.lighting == "combined") {
-        // float intensity = phong(closestIntersection, vec3(0,1,0));
+        float intensity = phong(closestIntersection, vec3(0,1,0));
         Colour colour = closestIntersection.intersectedTriangle.colour;
         uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
         if (checkShadow(closestIntersection, vec3(0,1,0), modelTriangles)) {
@@ -592,9 +625,25 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
           window.setPixelColour(x, y, c);
         }
       } else if (closestIntersection.intersectedTriangle.lighting == "no-shadows" ) {
+        float intensity = phong(closestIntersection, vec3(0,1,0));
         Colour colour = closestIntersection.intersectedTriangle.colour;
         uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
         window.setPixelColour(x, y, c);
+      } else if (closestIntersection.intersectedTriangle.lighting == "Mirror") {
+        // vec3 pointNormal = (1 - closestIntersection.u - closestIntersection.v) * closestIntersection.intersectedTriangle.vertexNormals[0] + closestIntersection.u * closestIntersection.intersectedTriangle.vertexNormals[1] + closestIntersection.v * closestIntersection.intersectedTriangle.vertexNormals[2];
+        vec3 pointNormal = closestIntersection.intersectedTriangle.normal;
+        vec3 reflectionRay = rayDirection - 2 * pointNormal * dot(rayDirection, pointNormal);
+        RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, closestIntersection);
+
+        if (reflectionIntersection.distanceFromCamera == numeric_limits<float>::infinity()) {
+          uint32_t c = (255 << 24) + (0 << 16) + (0 << 8) + 0;
+          window.setPixelColour(x, y, c);
+        } else {
+          float intensity = phong(reflectionIntersection, vec3(0,1,0));
+          Colour colour = reflectionIntersection.intersectedTriangle.colour;
+          uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
+          window.setPixelColour(x, y, c);
+        }
       }
     }
   }
