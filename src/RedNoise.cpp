@@ -473,7 +473,7 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
     float v = possibleSolution.z;
 
     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-      if (t < rayIntersection.distanceFromCamera && t > 0.01) {
+      if (t < rayIntersection.distanceFromCamera && t > 0.00001) {
         rayIntersection.distanceFromCamera = t;
         rayIntersection.triangleIndex = i;
         rayIntersection.intersectedTriangle = triangle;
