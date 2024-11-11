@@ -461,12 +461,12 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
 
     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
       if (t < rayIntersection.distanceFromCamera && t > 0) {
-        rayIntersection.distanceFromCamera = t;
-        rayIntersection.triangleIndex = i;
-        rayIntersection.intersectedTriangle = triangle;
-        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
-        rayIntersection.u = u;
-        rayIntersection.v = v;
+         rayIntersection.distanceFromCamera = t;
+         rayIntersection.triangleIndex = i;
+         rayIntersection.intersectedTriangle = triangle;
+         rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+         rayIntersection.u = u;
+         rayIntersection.v = v;
       }
     }
   }
@@ -652,10 +652,11 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
           if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) {
             uint32_t s = (255 << 24) + (int(r * 0.2) << 16) + (int(g * 0.2) << 8) + int(b * 0.2);
             window.setPixelColour(x, y, s);
-          } else {
-            uint32_t s = (255 << 24) + (int(r * intensity) << 16) + (int(g * intensity) << 8) + int(b * intensity);
-            window.setPixelColour(x, y, s);
+            continue;
           }
+          uint32_t s = (255 << 24) + (int(r * intensity) << 16) + (int(g * intensity) << 8) + int(b * intensity);
+          window.setPixelColour(x, y, s);
+          continue;
         }
         uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
         if (checkShadow(closestIntersection, vec3(0,1,0), modelTriangles)) {
