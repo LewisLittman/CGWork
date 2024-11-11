@@ -30,7 +30,7 @@ const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
 int renderMode;
-// vec3 light = vec3(0, 2.739334, 0);
+bool textures;
 
 
 vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
@@ -311,7 +311,8 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
   std::string line;
   std::vector<ModelTriangle> triangles;
   std::vector<vec3> vertices;
-  std::vector<vec3> vertexNormals; // Parallel vector to store normals for each vertex
+  std::vector<vec3> vertexNormals; // vector to store normals for each vertex
+  vector<TexturePoint> texture_points; // vector to store texture points for each triangle
   std::string colour;
 
   while (std::getline(File, line)) {
@@ -322,14 +323,24 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           vertex += offset;
           vertices.push_back(vertex);
           vertexNormals.emplace_back(0.0f, 0.0f, 0.0f); // Initialize normals to zero
+      } else if (values[0] == "vt") {
+          texture_points.push_back(TexturePoint(stof(values[1]), stof(values[2])));
       } else if (values[0] == "f") {
           int i1 = std::stoi(values[1]) - 1;
           int i2 = std::stoi(values[2]) - 1;
           int i3 = std::stoi(values[3]) - 1;
-          ModelTriangle triangle(vertices[i1], vertices[i2], vertices[i3], colours[colour]);
+          vector<string> v1 = split(values[1], '/');
+          vector<string> v2 = split(values[2], '/');
+          vector<string> v3 = split(values[3], '/');
+          ModelTriangle triangle(vertices[stoi(v1[0]) - 1], vertices[stoi(v2[0]) - 1], vertices[stoi(v3[0]) - 1], colours[colour]);
           triangle.lighting = lighting;
           if (colour == "Mirror") {
             triangle.lighting = "Mirror";
+          }
+          if (v1.size() > 1 && !v1[1].empty() && v2.size() > 1 && !v2[1].empty() && v3.size() > 1 && !v3[1].empty()) {
+            triangle.texturePoints[0] = texture_points[stoi(v1[1]) - 1];
+            triangle.texturePoints[1] = texture_points[stoi(v2[1]) - 1];
+            triangle.texturePoints[2] = texture_points[stoi(v3[1]) - 1];
           }
           triangles.push_back(triangle);
           // Calculate face normal and add it to vertex normals
@@ -367,16 +378,20 @@ std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
   std::ifstream File(filename);
   std::string line;
   std::unordered_map<std::string, Colour> colours;
-  std::string colour;
+  std::string colourName;
 
   while (std::getline(File, line)) {
     if (line == "") continue;
     std::vector<std::string> values = split(line, ' ');
     if (values[0] == "newmtl") {
-       colour = values[1];
+       colourName = values[1];
     } else if (values[0] == "Kd") {
-       colours.insert({colour, Colour(int(stof(values[1]) * 255),
+       colours.insert({colourName, Colour(int(stof(values[1]) * 255),
        int(stof(values[2]) * 255), int(stof(values[3]) * 255))});
+    } else if (values[0] == "map_Kd") {
+      Colour colour = colours[colourName];
+      colour.name = values[1];
+      colours[colourName] = colour;
     }
   }
   File.close();
@@ -446,12 +461,12 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
 
     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
       if (t < rayIntersection.distanceFromCamera && t > 0) {
-         rayIntersection.distanceFromCamera = t;
-         rayIntersection.triangleIndex = i;
-         rayIntersection.intersectedTriangle = triangle;
-         rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
-         rayIntersection.u = u;
-         rayIntersection.v = v;
+        rayIntersection.distanceFromCamera = t;
+        rayIntersection.triangleIndex = i;
+        rayIntersection.intersectedTriangle = triangle;
+        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+        rayIntersection.u = u;
+        rayIntersection.v = v;
       }
     }
   }
@@ -601,6 +616,18 @@ float phong(RayTriangleIntersection point, vec3 light) {
   return combinedIntensity;
 }
 
+uint32_t texture_pixel(RayTriangleIntersection point, TextureMap texture) {
+  ModelTriangle triangle = point.intersectedTriangle;
+
+  float x = (1 - point.u - point.v) * triangle.texturePoints[0].x + point.u * triangle.texturePoints[1].x + point.v * triangle.texturePoints[2].x;
+  float y = (1 - point.u - point.v) * triangle.texturePoints[0].y + point.u * triangle.texturePoints[1].y + point.v * triangle.texturePoints[2].y;
+
+  x *= texture.width;
+  y *= texture.height;
+
+  float texture_pixel = round(x) + round(y) * texture.width;
+  return texture.pixels[texture_pixel];
+}
 
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
   for (int x = 0; x < WIDTH; x++) {
@@ -617,6 +644,19 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       if (closestIntersection.intersectedTriangle.lighting == "combined") {
         float intensity = phong(closestIntersection, vec3(0,1,0));
         Colour colour = closestIntersection.intersectedTriangle.colour;
+        if (!colour.name.empty()) { //if there is a texture
+          uint32_t c = texture_pixel(closestIntersection, TextureMap(colour.name));
+          float r = (c >> 16) & 0xff;
+          float g = (c >> 8) & 0xff;
+          float b = c & 0xff;
+          if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) {
+            uint32_t s = (255 << 24) + (int(r * 0.2) << 16) + (int(g * 0.2) << 8) + int(b * 0.2);
+            window.setPixelColour(x, y, s);
+          } else {
+            uint32_t s = (255 << 24) + (int(r * intensity) << 16) + (int(g * intensity) << 8) + int(b * intensity);
+            window.setPixelColour(x, y, s);
+          }
+        }
         uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
         if (checkShadow(closestIntersection, vec3(0,1,0), modelTriangles)) {
           uint32_t s = (255 << 24) + (int(colour.red * 0.2) << 16) + (int(colour.green * 0.2) << 8) + int(colour.blue * 0.2);
@@ -692,12 +732,17 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 
 int main(int argc, char *argv[]) {
+  textures = true; //toggle on and off texture mapping
+  vector<ModelTriangle> modelTriangles;
+
   reset_camera();
-  // unordered_map<std::string, Colour> colours = parseMtl("../models/cornell-box.mtl");
-  std::vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), "combined");
+  if (textures) {
+    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), "combined");
+  } else {
+    modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), "combined");
+  }
   vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), "no-shadows");
   modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
-
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
   while (true) {
