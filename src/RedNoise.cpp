@@ -551,7 +551,7 @@ float phong(RayTriangleIntersection point, vec3 light) {
   if (specIntensity > 1) specIntensity = 1;
   if (specIntensity < 0) specIntensity = 0;
 
-  float combinedIntensity = 0.4 * proxIntensity + 0.7 * AoIintensity + 0.4 * specIntensity;
+  float combinedIntensity = 0.7 * proxIntensity + 0.5 * AoIintensity + 0.3 * specIntensity;
   if (combinedIntensity < 0.2) combinedIntensity = 0.2;
   if (combinedIntensity > 1) combinedIntensity = 1;
   return combinedIntensity;
