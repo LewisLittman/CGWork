@@ -32,6 +32,24 @@ float focalLength;
 int renderMode;
 bool textureToggle;
 
+uint32_t pack_colour(Colour colour, float intensity) {
+  return (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
+}
+
+uint32_t pack_colour(uint32_t colour, float intensity) {
+  float r = (colour >> 16) & 0xff;
+  float g = (colour >> 8) & 0xff;
+  float b = colour & 0xff;
+  return (255 << 24) + (int(r * intensity) << 16) + (int(g * intensity) << 8) + int(b * intensity);
+}
+
+Colour convert_colour_type(uint32_t colour) {
+  int r = (colour >> 16) & 0xff;
+  int g = (colour >> 8) & 0xff;
+  int b = colour & 0xff;
+  return Colour(r, g, b);
+}
+
 
 vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
   vector<float> result;
@@ -306,7 +324,7 @@ void textureTriangle(TextureMap texture, CanvasTriangle triangle, DrawingWindow 
 }
 
 //parses obj files returning vector<ModelTriangle> with all vertices of each triangle
-std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours, vec3 offset, string lighting) {
+std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unordered_map<std::string, Colour> colours, vec3 offset, bool shadows) {
   std::ifstream File(filename);
   std::string line;
   std::vector<ModelTriangle> triangles;
@@ -333,9 +351,10 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           vector<string> v2 = split(values[2], '/');
           vector<string> v3 = split(values[3], '/');
           ModelTriangle triangle(vertices[stoi(v1[0]) - 1], vertices[stoi(v2[0]) - 1], vertices[stoi(v3[0]) - 1], colours[colour]);
-          triangle.lighting = lighting;
+          triangle.shadows = shadows;
+          // triangle.lighting = lighting;
           if (colour == "Mirror") {
-            triangle.lighting = "Mirror";
+            triangle.mirror = true;
           }
           if (v1.size() > 1 && !v1[1].empty() && v2.size() > 1 && !v2[1].empty() && v3.size() > 1 && !v3[1].empty()) {
             triangle.texturePoints[0] = texture_points[stoi(v1[1]) - 1];
@@ -445,83 +464,6 @@ void rasterisedRender(float focalLength, DrawingWindow &window, std::vector<Mode
   }
 }
 
-RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles) {
-  RayTriangleIntersection rayIntersection;
-  rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
-  for (int i = 0; i < modelTriangles.size(); i++) {
-    ModelTriangle triangle = modelTriangles[i];
-    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
-    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
-    vec3 SPVector = cameraPosition - triangle.vertices[0];
-    mat3 DEMatrix(-rayDirection, e0, e1);
-    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
-    float t = possibleSolution.x;
-    float u = possibleSolution.y;
-    float v = possibleSolution.z;
-
-    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-      if (t < rayIntersection.distanceFromCamera && t > 0) {
-         rayIntersection.distanceFromCamera = t;
-         rayIntersection.triangleIndex = i;
-         rayIntersection.intersectedTriangle = triangle;
-         rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
-         rayIntersection.u = u;
-         rayIntersection.v = v;
-      }
-    }
-  }
-  return rayIntersection;
-}
-
-RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, RayTriangleIntersection intersection) {
-  RayTriangleIntersection rayIntersection;
-  rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
-  for (int i = 0; i < modelTriangles.size(); i++) {
-    ModelTriangle triangle = modelTriangles[i];
-    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
-    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
-    vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
-    mat3 DEMatrix(-rayDirection, e0, e1);
-    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
-    float t = possibleSolution.x;
-    float u = possibleSolution.y;
-    float v = possibleSolution.z;
-
-    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-      if (t < rayIntersection.distanceFromCamera && t > 0.00001) {
-        rayIntersection.distanceFromCamera = t;
-        rayIntersection.triangleIndex = i;
-        rayIntersection.intersectedTriangle = triangle;
-        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
-        rayIntersection.u = u;
-        rayIntersection.v = v;
-      }
-    }
-  }
-  return rayIntersection;
-}
-
-bool checkShadow(RayTriangleIntersection intersection, vec3 light, vector<ModelTriangle> modelTriangles) {
-  vec3 ray = light - intersection.intersectionPoint;
-  for (int i = 0; i < modelTriangles.size(); i++) {
-    ModelTriangle triangle = modelTriangles[i];
-    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
-    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
-    vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
-    mat3 DEMatrix(normalize(-ray), e0, e1);
-    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
-    float t = possibleSolution.x;
-    float u = possibleSolution.y;
-    float v = possibleSolution.z;
-
-    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-      if (t < length(ray) && t > 0.01 && intersection.triangleIndex != i) {
-         return true;
-      }
-    }
-  }
-  return false;
-}
 
 float proximityLighting(RayTriangleIntersection point, vec3 light, float lightStrength) {
   float distance = length(light - point.intersectionPoint);
@@ -588,7 +530,6 @@ float gourad(RayTriangleIntersection point, vec3 light) {
   return interpolatedCombinedBrightness;
 }
 
-
 float phong(RayTriangleIntersection point, vec3 light) {
   vec3 pointNormal = (1 - point.u - point.v) * point.intersectedTriangle.vertexNormals[0] + point.u * point.intersectedTriangle.vertexNormals[1] + point.v * point.intersectedTriangle.vertexNormals[2];
   // pointNormal = normalize(pointNormal);
@@ -629,6 +570,126 @@ uint32_t texture_pixel(RayTriangleIntersection point, const TextureMap& texture)
   return texture.pixels[texture_pixel];
 }
 
+bool checkShadow(RayTriangleIntersection intersection, vec3 light, vector<ModelTriangle> modelTriangles) {
+  vec3 ray = light - intersection.intersectionPoint;
+  for (int i = 0; i < modelTriangles.size(); i++) {
+    ModelTriangle triangle = modelTriangles[i];
+    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
+    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
+    vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
+    mat3 DEMatrix(normalize(-ray), e0, e1);
+    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
+    float t = possibleSolution.x;
+    float u = possibleSolution.y;
+    float v = possibleSolution.z;
+
+    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
+      if (t < length(ray) && t > 0.01 && intersection.triangleIndex != i) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, RayTriangleIntersection intersection, unordered_map<string, TextureMap>& TextureMaps) {
+  RayTriangleIntersection rayIntersection;
+  rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
+  for (int i = 0; i < modelTriangles.size(); i++) {
+    ModelTriangle triangle = modelTriangles[i];
+    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
+    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
+    vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
+    mat3 DEMatrix(-rayDirection, e0, e1);
+    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
+    float t = possibleSolution.x;
+    float u = possibleSolution.y;
+    float v = possibleSolution.z;
+
+    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
+      if (t < rayIntersection.distanceFromCamera && t > 0.00001) {
+        rayIntersection.distanceFromCamera = t;
+        rayIntersection.triangleIndex = i;
+        rayIntersection.intersectedTriangle = triangle;
+        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+        rayIntersection.u = u;
+        rayIntersection.v = v;
+        if (rayIntersection.intersectedTriangle.mirror) {
+          vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
+          vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
+          RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
+        } else if (!rayIntersection.intersectedTriangle.colour.name.empty()) {
+          uint32_t c = texture_pixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
+          rayIntersection.pointColour = convert_colour_type(c);
+          rayIntersection.u = u;
+          rayIntersection.v = v;
+          rayIntersection.distanceFromCamera = t;
+          rayIntersection.triangleIndex = i;
+          rayIntersection.intersectedTriangle = triangle;
+        } else {
+          rayIntersection.distanceFromCamera = t;
+          rayIntersection.triangleIndex = i;
+          rayIntersection.intersectedTriangle = triangle;
+          rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+          rayIntersection.u = u;
+          rayIntersection.v = v;
+          rayIntersection.pointColour = rayIntersection.intersectedTriangle.colour;
+        }
+      }
+    }
+  }
+  return rayIntersection;
+}
+
+RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps) {
+  RayTriangleIntersection rayIntersection;
+  rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
+  for (int i = 0; i < modelTriangles.size(); i++) {
+    ModelTriangle triangle = modelTriangles[i];
+    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
+    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
+    vec3 SPVector = cameraPosition - triangle.vertices[0];
+    mat3 DEMatrix(-rayDirection, e0, e1);
+    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
+    float t = possibleSolution.x;
+    float u = possibleSolution.y;
+    float v = possibleSolution.z;
+    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
+      if (t < rayIntersection.distanceFromCamera && t > 0) {
+        rayIntersection.distanceFromCamera = t;
+        rayIntersection.triangleIndex = i;
+        rayIntersection.intersectedTriangle = triangle;
+        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+        rayIntersection.u = u;
+        rayIntersection.v = v;
+        if (rayIntersection.intersectedTriangle.mirror) {
+          vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
+          vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
+          rayIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
+        } else if (!rayIntersection.intersectedTriangle.colour.name.empty()) {
+          uint32_t c = texture_pixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
+          rayIntersection.pointColour = convert_colour_type(c);
+          rayIntersection.u = u;
+          rayIntersection.v = v;
+          rayIntersection.distanceFromCamera = t;
+          rayIntersection.triangleIndex = i;
+          rayIntersection.intersectedTriangle = triangle;
+        } else {
+          rayIntersection.distanceFromCamera = t;
+          rayIntersection.triangleIndex = i;
+          rayIntersection.intersectedTriangle = triangle;
+          rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
+          rayIntersection.u = u;
+          rayIntersection.v = v;
+          rayIntersection.pointColour = rayIntersection.intersectedTriangle.colour;
+        }
+      }
+    }
+  }
+  return rayIntersection;
+}
+
+//check for shadows in this function
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps) {
   for (int x = 0; x < WIDTH; x++) {
     for (int y = 0; y < HEIGHT; y++) {
@@ -636,60 +697,14 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       float yT = HEIGHT / 2 - y;
       vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
-      RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles);
-      // float intensity = proximityLighting(closestIntersection, vec3(0, 1, 0), 20);
-      // float intensity = combinedLighting(closestIntersection);
-      // float intensity = gourad(closestIntersection, vec3(0,1,0));
-
-      if (closestIntersection.intersectedTriangle.lighting == "combined") {
+      RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps); //in get closest intersection I need to check
+      if (closestIntersection.intersectedTriangle.shadows && checkShadow(closestIntersection, vec3(0,1,0), modelTriangles)) {
+        Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
+        window.setPixelColour(x, y, pack_colour(colour, 0.2));
+      } else {
         float intensity = phong(closestIntersection, vec3(0,1,0));
-        Colour colour = closestIntersection.intersectedTriangle.colour;
-        if (!colour.name.empty()) { //if there is a texture
-          uint32_t c = texture_pixel(closestIntersection, TextureMaps[colour.name]);
-          float r = (c >> 16) & 0xff;
-          float g = (c >> 8) & 0xff;
-          float b = c & 0xff;
-          if (checkShadow(closestIntersection, vec3(0, 1, 0), modelTriangles)) {
-            uint32_t s = (255 << 24) + (int(r * 0.2) << 16) + (int(g * 0.2) << 8) + int(b * 0.2);
-            window.setPixelColour(x, y, s);
-            continue;
-          }
-          uint32_t s = (255 << 24) + (int(r * intensity) << 16) + (int(g * intensity) << 8) + int(b * intensity);
-          window.setPixelColour(x, y, s);
-          continue;
-        }
-        uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
-        if (checkShadow(closestIntersection, vec3(0,1,0), modelTriangles)) {
-          uint32_t s = (255 << 24) + (int(colour.red * 0.2) << 16) + (int(colour.green * 0.2) << 8) + int(colour.blue * 0.2);
-          window.setPixelColour(x, y, s);
-        } else {
-          window.setPixelColour(x, y, c);
-        }
-      } else if (closestIntersection.intersectedTriangle.lighting == "no-shadows" ) {
-        float intensity = phong(closestIntersection, vec3(0,1,0));
-        Colour colour = closestIntersection.intersectedTriangle.colour;
-        uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
-        window.setPixelColour(x, y, c);
-      } else if (closestIntersection.intersectedTriangle.lighting == "Mirror") {
-        // vec3 pointNormal = (1 - closestIntersection.u - closestIntersection.v) * closestIntersection.intersectedTriangle.vertexNormals[0] + closestIntersection.u * closestIntersection.intersectedTriangle.vertexNormals[1] + closestIntersection.v * closestIntersection.intersectedTriangle.vertexNormals[2];
-        vec3 pointNormal = closestIntersection.intersectedTriangle.normal;
-        vec3 reflectionRay = rayDirection - 2 * pointNormal * dot(rayDirection, pointNormal);
-        RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, closestIntersection);
-
-        if (reflectionIntersection.distanceFromCamera == numeric_limits<float>::infinity()) {
-          uint32_t c = (255 << 24) + (0 << 16) + (0 << 8) + 0;
-          window.setPixelColour(x, y, c);
-        } else {
-          float intensity = phong(reflectionIntersection, vec3(0,1,0));
-          Colour colour = reflectionIntersection.intersectedTriangle.colour;
-          uint32_t c = (255 << 24) + (int(colour.red * intensity) << 16) + (int(colour.green * intensity) << 8) + int(colour.blue * intensity);
-          if (checkShadow(reflectionIntersection, vec3(0,1,0), modelTriangles)) {
-            uint32_t s = (255 << 24) + (int(colour.red * 0.2) << 16) + (int(colour.green * 0.2) << 8) + int(colour.blue * 0.2);
-            window.setPixelColour(x, y, s);
-          } else {
-            window.setPixelColour(x, y, c);
-          }
-        }
+        Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+        window.setPixelColour(x, y, pack_colour(colour, 1.0));
       }
     }
   }
@@ -735,18 +750,18 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 int main(int argc, char *argv[]) {
   textureToggle = true; //toggle on and off texture mapping
   unordered_map<string, TextureMap> textures;
-  if (textureToggle) {
+  if (textureToggle) { //if textures are on map them to the textureMap objects
     textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
   }
 
   vector<ModelTriangle> modelTriangles;
   reset_camera();
   if (textureToggle) {
-    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), "combined");
+    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true);
   } else {
-    modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), "combined");
+    modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true);
   }
-  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), "no-shadows");
+  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false);
   modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
