@@ -30,7 +30,7 @@ const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
 int renderMode;
-bool textures;
+bool textureToggle;
 
 
 vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
@@ -616,7 +616,7 @@ float phong(RayTriangleIntersection point, vec3 light) {
   return combinedIntensity;
 }
 
-uint32_t texture_pixel(RayTriangleIntersection point, TextureMap texture) {
+uint32_t texture_pixel(RayTriangleIntersection point, const TextureMap& texture) {
   ModelTriangle triangle = point.intersectedTriangle;
 
   float x = (1 - point.u - point.v) * triangle.texturePoints[0].x + point.u * triangle.texturePoints[1].x + point.v * triangle.texturePoints[2].x;
@@ -629,7 +629,7 @@ uint32_t texture_pixel(RayTriangleIntersection point, TextureMap texture) {
   return texture.pixels[texture_pixel];
 }
 
-void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
+void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps) {
   for (int x = 0; x < WIDTH; x++) {
     for (int y = 0; y < HEIGHT; y++) {
       float xT = x - WIDTH / 2;
@@ -645,7 +645,7 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         float intensity = phong(closestIntersection, vec3(0,1,0));
         Colour colour = closestIntersection.intersectedTriangle.colour;
         if (!colour.name.empty()) { //if there is a texture
-          uint32_t c = texture_pixel(closestIntersection, TextureMap(colour.name));
+          uint32_t c = texture_pixel(closestIntersection, TextureMaps[colour.name]);
           float r = (c >> 16) & 0xff;
           float g = (c >> 8) & 0xff;
           float b = c & 0xff;
@@ -733,11 +733,15 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 
 
 int main(int argc, char *argv[]) {
-  textures = true; //toggle on and off texture mapping
-  vector<ModelTriangle> modelTriangles;
+  textureToggle = true; //toggle on and off texture mapping
+  unordered_map<string, TextureMap> textures;
+  if (textureToggle) {
+    textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
+  }
 
+  vector<ModelTriangle> modelTriangles;
   reset_camera();
-  if (textures) {
+  if (textureToggle) {
     modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), "combined");
   } else {
     modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), "combined");
@@ -752,7 +756,7 @@ int main(int argc, char *argv[]) {
     draw(window);
     if (renderMode == 0) { wireFrameRender(2.0, window, modelTriangles); }
     else if (renderMode == 1) { rasterisedRender(2.0, window, modelTriangles); }
-    else if (renderMode == 2) { rayTraceRender(2.0, window, modelTriangles); }
+    else if (renderMode == 2) { rayTraceRender(2.0, window, modelTriangles, textures); }
     // Need to render the frame at the end, or nothing actually gets shown on the screen !
     window.renderFrame();
   }
