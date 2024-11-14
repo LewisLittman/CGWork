@@ -12,6 +12,7 @@ struct RayTriangleIntersection {
 	float u;
 	float v;
 	Colour pointColour;
+	glm::vec3 pointNormal;
 
 	RayTriangleIntersection();
 	RayTriangleIntersection(const glm::vec3 &point, float distance, const ModelTriangle &triangle, size_t index);

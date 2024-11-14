@@ -355,6 +355,8 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           // triangle.lighting = lighting;
           if (colour == "Mirror") {
             triangle.mirror = true;
+          } else if (colour == "NormalMap") {
+            triangle.normalMap = true;
           }
           if (v1.size() > 1 && !v1[1].empty() && v2.size() > 1 && !v2[1].empty() && v3.size() > 1 && !v3[1].empty()) {
             triangle.texturePoints[0] = texture_points[stoi(v1[1]) - 1];
@@ -552,12 +554,36 @@ float phong(RayTriangleIntersection point, vec3 light) {
   if (specIntensity < 0) specIntensity = 0;
 
   float combinedIntensity = 0.7 * proxIntensity + 0.5 * AoIintensity + 0.3 * specIntensity;
-  if (combinedIntensity < 0.2) combinedIntensity = 0.2;
+  if (combinedIntensity < 0.3) combinedIntensity = 0.3;
   if (combinedIntensity > 1) combinedIntensity = 1;
   return combinedIntensity;
 }
 
-uint32_t texture_pixel(RayTriangleIntersection point, const TextureMap& texture) {
+float normalMapIntenisty(RayTriangleIntersection point, vec3 light, vec3 pointNormal) {
+  float distance = length(light - point.intersectionPoint);
+  float proxIntensity = 20 / (4 * PI * distance * distance); //20 = light strength
+  if (proxIntensity > 1) proxIntensity = 1;
+  if (proxIntensity < 0) proxIntensity = 0;
+  //AoI lighting for the point
+  vec3 AoIlightRay = normalize(vec3(light - point.intersectionPoint));
+  float AoIintensity = dot(AoIlightRay, pointNormal);
+  if(AoIintensity > 1) AoIintensity = 1;
+  if (AoIintensity < 0) AoIintensity = 0;
+  //Specular lighting for each vertex
+  vec3 specLightRay = normalize(vec3(point.intersectionPoint- light));
+  vec3 reflectionRay = normalize(specLightRay - 2 * pointNormal * dot(specLightRay, pointNormal));
+  vec3 viewRay = normalize(cameraPosition - point.intersectionPoint);
+  float specIntensity = pow(dot(viewRay, reflectionRay), 256);
+  if (specIntensity > 1) specIntensity = 1;
+  if (specIntensity < 0) specIntensity = 0;
+
+  float combinedIntensity = 0.7 * proxIntensity + 0.5 * AoIintensity + 0.3 * specIntensity;
+  if (combinedIntensity < 0.3) combinedIntensity = 0.3;
+  if (combinedIntensity > 1) combinedIntensity = 1;
+  return combinedIntensity;
+}
+
+uint32_t texturePixel(RayTriangleIntersection point, const TextureMap& texture) {
   ModelTriangle triangle = point.intersectedTriangle;
 
   float x = (1 - point.u - point.v) * triangle.texturePoints[0].x + point.u * triangle.texturePoints[1].x + point.v * triangle.texturePoints[2].x;
@@ -566,8 +592,8 @@ uint32_t texture_pixel(RayTriangleIntersection point, const TextureMap& texture)
   x *= texture.width;
   y *= texture.height;
 
-  float texture_pixel = round(x) + round(y) * texture.width;
-  return texture.pixels[texture_pixel];
+  float texturePixel = round(x) + round(y) * texture.width;
+  return texture.pixels[texturePixel];
 }
 
 int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vector<ModelTriangle> modelTriangles) {
@@ -623,8 +649,15 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
           RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
-        } else if (!rayIntersection.intersectedTriangle.colour.name.empty()) {
-          uint32_t c = texture_pixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
+        } else if (rayIntersection.intersectedTriangle.normalMap) {
+          rayIntersection.u = u;
+          rayIntersection.v = v;
+          rayIntersection.distanceFromCamera = t;
+          rayIntersection.triangleIndex = i;
+          rayIntersection.intersectedTriangle = triangle;
+          rayIntersection.pointColour = Colour(255,0,0);
+        }  else if (!rayIntersection.intersectedTriangle.colour.name.empty() && !rayIntersection.intersectedTriangle.normalMap) {
+          uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
           rayIntersection.u = u;
           rayIntersection.v = v;
@@ -671,8 +704,15 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
           rayIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
-        } else if (!rayIntersection.intersectedTriangle.colour.name.empty()) {
-          uint32_t c = texture_pixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
+        } else if (rayIntersection.intersectedTriangle.normalMap) {
+          rayIntersection.u = u;
+          rayIntersection.v = v;
+          rayIntersection.distanceFromCamera = t;
+          rayIntersection.triangleIndex = i;
+          rayIntersection.intersectedTriangle = triangle;
+          rayIntersection.pointColour = Colour(255,0,0);
+        } else if (!rayIntersection.intersectedTriangle.colour.name.empty() && !rayIntersection.intersectedTriangle.normalMap) {
+          uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
           rayIntersection.u = u;
           rayIntersection.v = v;
@@ -694,19 +734,45 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
   return rayIntersection;
 }
 
-void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps, vector<vec3> lights) {
+// vec3 getNormalMap(RayTriangleIntersection point, const TextureMap& texture) {
+//   ModelTriangle triangle = point.intersectedTriangle;
+//
+//   float x = (1 - point.u - point.v) * triangle.texturePoints[0].x + point.u * triangle.texturePoints[1].x + point.v * triangle.texturePoints[2].x;
+//   float y = (1 - point.u - point.v) * triangle.texturePoints[0].y + point.u * triangle.texturePoints[1].y + point.v * triangle.texturePoints[2].y;
+//
+//   x *= texture.width;
+//   y *= texture.height;
+//
+//   float texturePixel = round(x) + round(y) * texture.width;
+//   uint32_t pixelColour = texture.pixels[texturePixel];
+//   Colour pixelColourType = convert_colour_type(pixelColour);
+//   cout << pixelColourType.red << pixelColourType.green << pixelColourType.blue << endl;
+//   return vec3(pixelColourType.red, pixelColourType.green, pixelColourType.blue);
+// }
+
+void rayTraceRender(float focalLength, DrawingWindow &window, const vector<ModelTriangle>& modelTriangles, unordered_map<string, TextureMap>& TextureMaps, const vector<vec3>& lights) {
   for (int x = 0; x < WIDTH; x++) {
-    for (int y = 0; y < HEIGHT; y++) {
+    for (int y = 0; y < HEIGHT; y++)
+    {
       float xT = x - WIDTH / 2;
       float yT = HEIGHT / 2 - y;
       vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
       int blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
-      if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0) { //if the point has shadows enabled and at least 1 light point is blocked
-        float shadowIntensity = (lights.size() - blockedLights) * 0.05f;
+      if (closestIntersection.intersectedTriangle.shadows && checkShadow(closestIntersection, lights, modelTriangles) > 0 && !closestIntersection.intersectedTriangle.normalMap) { //if the point has shadows enabled and at least 1 light point is blocked
+        float shadowIntensity = (blockedLights) / lights.size() * 0.3 + 0.1;
+        // cout << blockedLights << endl;
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+      } else if (closestIntersection.intersectedTriangle.normalMap) {
+        // cout << closestIntersection.intersectedTriangle.colour.name << endl;
+        uint32_t pointColour = texturePixel(closestIntersection, TextureMaps[closestIntersection.intersectedTriangle.colour.name]);
+        Colour pointColourConverted = convert_colour_type(pointColour);
+        vec3 pointNormal = vec3(pointColourConverted.red, pointColourConverted.green, pointColourConverted.blue);
+        float normalIntensity = normalMapIntenisty(closestIntersection, vec3(0,1.2,0), normalize(pointNormal));
+        Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, normalIntensity));
+        window.setPixelColour(x, y, pack_colour(colour, 1.0));
       } else {
         float intensity = phong(closestIntersection, vec3(0,1.2,0));
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
@@ -758,14 +824,19 @@ int main(int argc, char *argv[])
   unordered_map<string, TextureMap> textures;
   if (textureToggle) { //if textures are on map them to the textureMap objects
     textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
+    textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
   }
 
   vector<vec3> lights {
     vec3(0,1.2,0),
-    vec3(-0.35, 1.2, -0.28),
-    vec3(0.35, 1.2, -0.28),
-    vec3(-0.35, 1.2, 0.28),
-    vec3(0.35, 1.2, 0.28),
+    // vec3(-0.20, 1.2, -0.18),
+    // vec3(0.20, 1.2, -0.18),
+    // vec3(-0.20, 1.2, 0.18),
+    // vec3(0.20, 1.2, 0.18),
+    // vec3(-0.10, 1.2, 0.09),
+    // vec3(0.10, 1.2, 0.09),
+    // vec3(-0.10, 1.2, -0.09),
+    // vec3(0.10, 1.2, 0.09)
   };
 
   vector<ModelTriangle> modelTriangles;
@@ -776,7 +847,9 @@ int main(int argc, char *argv[])
     modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true);
   }
   vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false);
+  vector<ModelTriangle> cubeTriangles = parseObj("../models/normal_map_cube.obj", 0.5, parseMtl("../models/normal_map_cube.mtl"), vec3(-1, -0.5, 0.5), true);
   modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
+  modelTriangles.insert(modelTriangles.end(), cubeTriangles.begin(), cubeTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
   while (true) {

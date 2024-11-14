@@ -22,9 +22,6 @@ Kd 1.000000 0.000000 1.000000
 newmtl Cyan
 Kd 0.000000 1.000000 1.000000
 
-newmtl Mirror
-Kd 0.000000 0.000000 1.000000
-
-newmtl Cobbles
-Kd 1.000000 1.000000 1.000000
-map_Kd ../models/texture.ppm
+newmtl NormalMap
+Kd 1.000000 0.000000 0.000000
+map_Kd ../models/brick_normal_map.ppm
