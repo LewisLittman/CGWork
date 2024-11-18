@@ -819,7 +819,7 @@ int main(int argc, char *argv[])
   }
 
   vector<vec3> lights {
-    vec3(1,1.2,3),
+    vec3(-2.5,1.2,-0.32),
     // vec3(0, 1.2, 1.2),
     vec3(-0.35, 1.2, -0.28),
     vec3(0.35, 1.2, -0.28),
