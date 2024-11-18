@@ -542,7 +542,7 @@ float phong(RayTriangleIntersection point, vec3 light) {
   // pointNormal = normalize(pointNormal);
   //proximity lighting for the point
   float distance = length(light - point.intersectionPoint);
-  float proxIntensity = 50 / (4 * PI * distance * distance); //20 = light strength
+  float proxIntensity = 20 / (4 * PI * distance * distance); //20 = light strength
   if (proxIntensity > 1) proxIntensity = 1;
   if (proxIntensity < 0) proxIntensity = 0;
   //AoI lighting for the point
@@ -606,6 +606,23 @@ float normalMapIntensity(RayTriangleIntersection point, vec3 pointNormal, vec3 l
   if(AoIintensity > 1) AoIintensity = 1;
   if (AoIintensity < 0) AoIintensity = 0;
   return AoIintensity;
+
+  float distance = length(light - point.intersectionPoint);
+  float proxIntensity = 20 / (4 * PI * distance * distance); //20 = light strength
+  if (proxIntensity > 1) proxIntensity = 1;
+  if (proxIntensity < 0) proxIntensity = 0;
+
+  //Specular lighting for each vertex
+  vec3 specLightRay = normalize(vec3(point.intersectionPoint - light));
+  vec3 reflectionRay = normalize(specLightRay - 2 * pointNormal * dot(specLightRay, pointNormal));
+  vec3 viewRay = normalize(cameraPosition - point.intersectionPoint);
+  float specIntensity = pow(dot(viewRay, reflectionRay), 256);
+  if (specIntensity > 1) specIntensity = 1;
+  if (specIntensity < 0) specIntensity = 0;
+
+  float combinedIntensity = 0.7 * proxIntensity + 0.5 * AoIintensity + 0.3 * specIntensity;
+  if (combinedIntensity < 0.2) combinedIntensity = 0.2;
+  if (combinedIntensity > 1) combinedIntensity = 1;
 }
 
 int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vector<ModelTriangle> modelTriangles) {
@@ -748,9 +765,6 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
       } else if (closestIntersection.intersectedTriangle.normalMap && closestIntersection.distanceFromCamera != numeric_limits<float>::infinity()) {
-        if (checkShadow(closestIntersection, lights, modelTriangles) > 0) {
-
-        }
         vec3 pointNormal = colourToNormal(closestIntersection.pointColour, closestIntersection);
         float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
         window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
