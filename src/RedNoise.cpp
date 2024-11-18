@@ -443,11 +443,16 @@ void pointCloud(float focalLength, DrawingWindow &window, std::vector<ModelTrian
 
 void wireFrameRender(float focalLength, DrawingWindow &window, std::vector<ModelTriangle> modelTriangles) {
   Colour colour = Colour(255,255,255);
+  std::vector<std::vector<float>> depthBuffer(WIDTH, std::vector<float>(HEIGHT, 0.0));
   for (size_t i = 0; i < modelTriangles.size(); i++) {
     ModelTriangle triangle = modelTriangles[i];
     CanvasPoint p0 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[0]);
     CanvasPoint p1 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[1]);
     CanvasPoint p2 = projectVertexOntoCanvasPoint(focalLength, triangle.vertices[2]);
+    // drawDepthLine(p0, p1, colour, window, depthBuffer);
+    // drawDepthLine(p1, p2, colour, window, depthBuffer);
+    // drawDepthLine(p2, p0, colour, window, depthBuffer);
+
     drawLine(p0, p1, colour, window);
     drawLine(p1, p2, colour, window);
     drawLine(p2, p0, colour, window);
@@ -573,16 +578,25 @@ uint32_t texturePixel(RayTriangleIntersection point, const TextureMap& texture) 
   return texture.pixels[texturePixel];
 }
 
-vec3 colourToNormal(Colour normalMapColour) {
-  // float x = normalMapColour.red / 255 * 2 - 1;
-  // float y = normalMapColour.green / 255 * 2 - 1;
-  // float z = normalMapColour.blue / 255 * 2 - 1;
-  float x = normalMapColour.red - 128;
-  float y = normalMapColour.green - 128;
-  float z = normalMapColour.blue - 128;
-  // float x = 128 - normalMapColour.red;
-  // float y = 128 - normalMapColour.green;
-  // float z = 128 - normalMapColour.blue;
+vec3 colourToNormal(Colour normalMapColour, RayTriangleIntersection point) {
+  float x,y,z;
+  if (point.intersectedTriangle.normal == vec3(0,0,1)) { //if front face of cube want z to be positive, x and y should be good
+    x = 128 - normalMapColour.red;
+    y = normalMapColour.green - 128;
+    z = normalMapColour.blue - 128;
+  } else if (point.intersectedTriangle.normal == vec3(1,0,0)) { //if right face of cube want z of colour -> x, x-> -z, y -> y
+    x = normalMapColour.blue - 128;
+    y = normalMapColour.green - 128;
+    z = normalMapColour.red - 128;
+  } else if (point.intersectedTriangle.normal == vec3(0, 0, -1)) { //if back face of cube inverse x, y is normal, inverse z
+    x = normalMapColour.red - 128;
+    y = normalMapColour.green - 128;
+    z = 128 - normalMapColour.blue;
+  } else if (point.intersectedTriangle.normal == vec3(-1, 0, 0)) {
+    x = 128 - normalMapColour.blue;
+    y = normalMapColour.green - 128;
+    z = 128 - normalMapColour.red;
+  }
 
   return normalize(vec3(x, y, z));
 }
@@ -737,15 +751,18 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
       int blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
-      if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0) { //if the point has shadows enabled and at least 1 light point is blocked
+      if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0 && !closestIntersection.intersectedTriangle.normalMap) { //if the point has shadows enabled and at least 1 light point is blocked
         float shadowIntensity = (lights.size() - blockedLights) * 0.05f;
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
       } else if (closestIntersection.intersectedTriangle.normalMap && closestIntersection.distanceFromCamera != numeric_limits<float>::infinity()) {
-        vec3 pointNormal = colourToNormal(closestIntersection.pointColour);
-        mat3 TBN = calculateTBN(closestIntersection);
-        vec3 transformedNormal = TBN * pointNormal;
-        float mapNormalIntensity = normalMapIntensity(closestIntersection, transformedNormal, lights[0]);
+        vec3 pointNormal = colourToNormal(closestIntersection.pointColour, closestIntersection);
+        // mat3 TBN = calculateTBN(closestIntersection);
+        // vec3 transformedNormal = TBN * pointNormal;
+        // float mapNormalIntensity = normalMapIntensity(closestIntersection, transformedNormal, lights[0]);
+        // window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
+        float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
+        // window.setPixelColour(x, y, pack_colour(closestIntersection.pointColour, 1));
         window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
       } else {
         float intensity = phong(closestIntersection, vec3(0,1.2,0));
@@ -802,7 +819,8 @@ int main(int argc, char *argv[])
   }
 
   vector<vec3> lights {
-    vec3(0,1.2,0),
+    vec3(1,1.2,3),
+    // vec3(0, 1.2, 1.2),
     vec3(-0.35, 1.2, -0.28),
     vec3(0.35, 1.2, -0.28),
     vec3(-0.35, 1.2, 0.28),
@@ -816,10 +834,12 @@ int main(int argc, char *argv[])
   // } else {
   //   modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true);
   // }
-  vector<ModelTriangle> normalCubeTriangles =  parseObj("../models/normal_map_cube.obj", 0.5, parseMtl("../models/normal_map_cube.mtl"), vec3(-1, -1, 1), true);
+  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.5, parseMtl("../models/normal_map_cube.mtl"), vec3(-1, -1, 1), true);
+  vector<ModelTriangle> lightCubeTriangles = parseObj("../models/light_cube.obj", 0.1, parseMtl("../models/normal_map_cube.mtl"), lights[0], false);
   // vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false);
   // modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
   modelTriangles.insert(modelTriangles.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
+  modelTriangles.insert(modelTriangles.end(), lightCubeTriangles.begin(), lightCubeTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
   while (true) {
