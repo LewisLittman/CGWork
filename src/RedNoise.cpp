@@ -352,7 +352,6 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           vector<string> v3 = split(values[3], '/');
           ModelTriangle triangle(vertices[stoi(v1[0]) - 1], vertices[stoi(v2[0]) - 1], vertices[stoi(v3[0]) - 1], colours[colour]);
           triangle.shadows = shadows;
-          // triangle.lighting = lighting;
           if (colour == "Mirror") {
             triangle.mirror = true;
           }
@@ -543,7 +542,7 @@ float phong(RayTriangleIntersection point, vec3 light) {
   // pointNormal = normalize(pointNormal);
   //proximity lighting for the point
   float distance = length(light - point.intersectionPoint);
-  float proxIntensity = 20 / (4 * PI * distance * distance); //20 = light strength
+  float proxIntensity = 50 / (4 * PI * distance * distance); //20 = light strength
   if (proxIntensity > 1) proxIntensity = 1;
   if (proxIntensity < 0) proxIntensity = 0;
   //AoI lighting for the point
@@ -605,7 +604,7 @@ float normalMapIntensity(RayTriangleIntersection point, vec3 pointNormal, vec3 l
   vec3 AoIlightRay = normalize(vec3(light - point.intersectionPoint));
   float AoIintensity = dot(AoIlightRay, pointNormal);
   if(AoIintensity > 1) AoIintensity = 1;
-  if (AoIintensity < 0.1) AoIintensity = 0.1;
+  if (AoIintensity < 0) AoIintensity = 0;
   return AoIintensity;
 }
 
@@ -734,14 +733,6 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
   return rayIntersection;
 }
 
-mat3 calculateTBN(RayTriangleIntersection point) {
-  vec3 surfaceNormal = point.intersectedTriangle.normal;
-  vec3 reference = abs(surfaceNormal.x) > abs(surfaceNormal.y) ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
-  vec3 tangent = normalize(reference - dot(reference, surfaceNormal) * surfaceNormal);
-  vec3 bitangent = cross(surfaceNormal, tangent);
-  return mat3(normalize(tangent), normalize(bitangent), normalize(surfaceNormal));
-}
-
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps, vector<vec3> lights) {
   for (int x = 0; x < WIDTH; x++) {
     for (int y = 0; y < HEIGHT; y++) {
@@ -752,17 +743,16 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
       int blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
       if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0 && !closestIntersection.intersectedTriangle.normalMap) { //if the point has shadows enabled and at least 1 light point is blocked
-        float shadowIntensity = (lights.size() - blockedLights) * 0.05f;
+        // float shadowIntensity = (lights.size() - blockedLights) * 0.05f; shit soft shadow code
+        float shadowIntensity = 0.2;
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
       } else if (closestIntersection.intersectedTriangle.normalMap && closestIntersection.distanceFromCamera != numeric_limits<float>::infinity()) {
+        if (checkShadow(closestIntersection, lights, modelTriangles) > 0) {
+
+        }
         vec3 pointNormal = colourToNormal(closestIntersection.pointColour, closestIntersection);
-        // mat3 TBN = calculateTBN(closestIntersection);
-        // vec3 transformedNormal = TBN * pointNormal;
-        // float mapNormalIntensity = normalMapIntensity(closestIntersection, transformedNormal, lights[0]);
-        // window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
         float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
-        // window.setPixelColour(x, y, pack_colour(closestIntersection.pointColour, 1));
         window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
       } else {
         float intensity = phong(closestIntersection, vec3(0,1.2,0));
@@ -779,7 +769,7 @@ void draw(DrawingWindow &window) {
 }
 
 
-void handleEvent(SDL_Event event, DrawingWindow &window) {
+void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
   if (event.type == SDL_KEYDOWN) {
     if (event.key.keysym.sym == SDLK_LEFT) std::cout << "LEFT" << std::endl;
     else if (event.key.keysym.sym == SDLK_RIGHT) std::cout << "RIGHT" << std::endl;
@@ -802,6 +792,9 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
     else if (event.key.keysym.sym == SDLK_b) { renderMode = 0; cout << "RenderMode: Wireframe" << endl; }
     else if (event.key.keysym.sym == SDLK_n) { renderMode = 1; cout << "RenderMode: Rasterised" << endl; }
     else if (event.key.keysym.sym == SDLK_m) { renderMode = 2; cout << "RenderMode: Ray Tracing" << endl; }
+    else if (event.key.keysym.sym == SDLK_y) { lights[0] = vec3(0, 1.2, -1); }
+    else if (event.key.keysym.sym == SDLK_u) { lights[0] = vec3(0, 1.2, 0); }
+    else if (event.key.keysym.sym == SDLK_i) { lights[0] = vec3(1, 1.2, 0); }
   } else if (event.type == SDL_MOUSEBUTTONDOWN) {
     window.savePPM("output.ppm");
     window.saveBMP("output.bmp");
@@ -816,35 +809,37 @@ int main(int argc, char *argv[])
   if (textureToggle) { //if textures are on map them to the textureMap objects
     textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
     textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
+    textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
   }
 
   vector<vec3> lights {
-    vec3(-2.5,1.2,-0.32),
-    // vec3(0, 1.2, 1.2),
-    vec3(-0.35, 1.2, -0.28),
-    vec3(0.35, 1.2, -0.28),
-    vec3(-0.35, 1.2, 0.28),
-    vec3(0.35, 1.2, 0.28),
+    vec3(0,1.2,0),
+    // vec3(-0.35, 1.2, -0.28),
+    // vec3(0.35, 1.2, -0.28),
+    // vec3(-0.35, 1.2, 0.28),
+    // vec3(0.35, 1.2, 0.28),
   };
 
   vector<ModelTriangle> modelTriangles;
   reset_camera();
-  // if (textureToggle) {
-  //   modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true);
-  // } else {
-  //   modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true);
-  // }
-  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.5, parseMtl("../models/normal_map_cube.mtl"), vec3(-1, -1, 1), true);
-  vector<ModelTriangle> lightCubeTriangles = parseObj("../models/light_cube.obj", 0.1, parseMtl("../models/normal_map_cube.mtl"), lights[0], false);
+  if (textureToggle) {
+    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true);
+  } else {
+    modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true);
+  }
+  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.4, parseMtl("../models/normal_map_cube.mtl"), vec3(-1.2, -1.25, 1), true);
+  vector<ModelTriangle> woodTopTriangles = parseObj("../models/wood-top.obj", 0.4, parseMtl("../models/wood-top.mtl"), vec3(-1.2, -1.25, 1), true);
+  // vector<ModelTriangle> lightCubeTriangles = parseObj("../models/light_cube.obj", 0.1, parseMtl("../models/normal_map_cube.mtl"), lights[0], false);
   // vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false);
   // modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
   modelTriangles.insert(modelTriangles.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
-  modelTriangles.insert(modelTriangles.end(), lightCubeTriangles.begin(), lightCubeTriangles.end());
+  modelTriangles.insert(modelTriangles.end(), woodTopTriangles.begin(), woodTopTriangles.end());
+  // modelTriangles.insert(modelTriangles.end(), lightCubeTriangles.begin(), lightCubeTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
   while (true) {
     // We MUST poll for events - otherwise the window will freeze !
-    if (window.pollForInputEvents(event)) handleEvent(event, window);
+    if (window.pollForInputEvents(event)) handleEvent(event, window, lights);
     draw(window);
     if (renderMode == 0) { wireFrameRender(2.0, window, modelTriangles); }
     else if (renderMode == 1) { rasterisedRender(2.0, window, modelTriangles); }
