@@ -9,7 +9,8 @@ RayTriangleIntersection::RayTriangleIntersection(const glm::vec3 &point, float d
 		u(),
 		v(),
 		pointColour(),
-		pointNormal() {}
+		pointNormal(),
+		hit() {}
 
 std::ostream &operator<<(std::ostream &os, const RayTriangleIntersection &intersection) {
 	os << "Intersection is at [" << intersection.intersectionPoint[0] << "," << intersection.intersectionPoint[1] << "," <<

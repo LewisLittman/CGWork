@@ -22,10 +22,6 @@ Kd 1.000000 0.000000 1.000000
 newmtl Cyan
 Kd 0.000000 1.000000 1.000000
 
-newmtl WoodTexture
-Kd 1.000000 0.000000 0.000000
-map_Kd ../models/WoodTexture.ppm
-
 newmtl NormalMap
 Kd 1.000000 0.000000 0.000000
 map_Kd ../models/brick_normal_map.ppm

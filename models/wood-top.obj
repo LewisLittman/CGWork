@@ -1,7 +1,7 @@
 mtllib wood-top.mtl
 
 o Top_wood
-usemtl WoodTexture
+usemtl Texture
 v 1.000000 1.000001 1.000000
 v -1.000000 1.000001 1.000000
 v 1.000000 1.000001 -1.000000

@@ -357,6 +357,10 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           }
           if (colour == "NormalMap") {
             triangle.normalMap = true;
+            triangle.texture = true;
+          }
+          if (colour == "Texture") {
+            triangle.texture = true;
           }
           if (v1.size() > 1 && !v1[1].empty() && v2.size() > 1 && !v2[1].empty() && v3.size() > 1 && !v3[1].empty()) {
             triangle.texturePoints[0] = texture_points[stoi(v1[1]) - 1];
@@ -652,8 +656,60 @@ int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vecto
   return blockedLights;
 }
 
+uint32_t getEnvMapPixelColour(float xRatio, float yRatio, const TextureMap& texture) {
+  float x = round(xRatio * (texture.width - 1));
+  float y = round(yRatio * (texture.height - 1));
+
+  float texturePixel = x + y * texture.width;
+  return texture.pixels[texturePixel];
+
+}
+
+Colour envMapDirection(vec3 ray, unordered_map<string, TextureMap>& TextureMaps) {
+  uint32_t envPixelColour;
+  vec3 rayDirection = normalize(ray);
+  float xRatio;
+  float yRatio;
+  float largestValue = max(fabs(rayDirection.x), fabs(rayDirection.y), fabs(rayDirection.z));
+
+  if (largestValue == fabs(rayDirection.x)) { // ray will hit left or right wall
+    if (rayDirection.x > 0) { // ray will hit right wall
+      xRatio = (rayDirection.z / abs(rayDirection.x) + 1 )/ 2;
+      yRatio = (-rayDirection.y / abs(rayDirection.x) + 1) / 2;
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/px.ppm"]);
+    } else { //ray will hit left wall
+      xRatio = (-rayDirection.z / abs(rayDirection.x) + 1 )/ 2;
+      yRatio = (-rayDirection.y / abs(rayDirection.x) + 1) / 2;
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/nx.ppm"]);
+    }
+  } else if (largestValue == fabs(rayDirection.y)) { //ray will hit top or bottom wall
+    if (rayDirection.y > 0) { // ray will hit top wall
+      xRatio = (rayDirection.x / abs(rayDirection.y) + 1 )/ 2;
+      yRatio = (-rayDirection.z / abs(rayDirection.y) + 1) / 2;
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/py.ppm"]);
+    } else { //ray will hit bottom wall (correct orientation)
+      xRatio = (rayDirection.x / abs(rayDirection.y) + 1 )/ 2;
+      yRatio = (rayDirection.z / abs(rayDirection.y) + 1) / 2;
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/ny.ppm"]);
+    }
+  } else if (largestValue == fabs(rayDirection.z)) { //ray will hit front or back wall
+    if (rayDirection.z > 0) { // ray will hit back wall
+      xRatio = (-rayDirection.x / abs(rayDirection.z) + 1 )/ 2;
+      yRatio = (-rayDirection.y / abs(rayDirection.z) + 1) / 2;
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/nz.ppm"]);
+    } else { //ray will hit front wall (correct orientation)
+      xRatio = (rayDirection.x / abs(rayDirection.z) + 1 )/ 2;
+      yRatio = (-rayDirection.y / abs(rayDirection.z) + 1) / 2;
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/pz.ppm"]);
+    }
+  }
+  return convert_colour_type(envPixelColour);
+}
+
+
 RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, RayTriangleIntersection intersection, unordered_map<string, TextureMap>& TextureMaps) {
   RayTriangleIntersection rayIntersection;
+  rayIntersection.hit = false;
   rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
   for (int i = 0; i < modelTriangles.size(); i++) {
     ModelTriangle triangle = modelTriangles[i];
@@ -668,6 +724,7 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
 
     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
       if (t < rayIntersection.distanceFromCamera && t > 0.00001) {
+        rayIntersection.hit = true;
         rayIntersection.distanceFromCamera = t;
         rayIntersection.triangleIndex = i;
         rayIntersection.intersectedTriangle = triangle;
@@ -678,7 +735,7 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
           RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
-        } else if (!rayIntersection.intersectedTriangle.colour.name.empty()) {
+        } else if (!rayIntersection.intersectedTriangle.colour.name.empty() && rayIntersection.hit) {
           uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
           rayIntersection.u = u;
@@ -703,6 +760,7 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
 
 RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps) {
   RayTriangleIntersection rayIntersection;
+  rayIntersection.hit = false;
   rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
   for (int i = 0; i < modelTriangles.size(); i++) {
     ModelTriangle triangle = modelTriangles[i];
@@ -716,6 +774,7 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
     float v = possibleSolution.z;
     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
       if (t < rayIntersection.distanceFromCamera && t > 0) {
+        rayIntersection.hit = true;
         rayIntersection.distanceFromCamera = t;
         rayIntersection.triangleIndex = i;
         rayIntersection.intersectedTriangle = triangle;
@@ -759,12 +818,15 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
       int blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
-      if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0 && !closestIntersection.intersectedTriangle.normalMap) { //if the point has shadows enabled and at least 1 light point is blocked
+      if (closestIntersection.hit == false) { //if we hit the env map
+        Colour envMapColour = envMapDirection(rayDirection, TextureMaps);
+        window.setPixelColour(x, y, pack_colour(envMapColour, 1));
+      } else if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0 && !closestIntersection.intersectedTriangle.normalMap) { //if the point has shadows enabled and at least 1 light point is blocked
         // float shadowIntensity = (lights.size() - blockedLights) * 0.05f; shit soft shadow code
         float shadowIntensity = 0.2;
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
-      } else if (closestIntersection.intersectedTriangle.normalMap && closestIntersection.distanceFromCamera != numeric_limits<float>::infinity()) {
+      } else if (closestIntersection.intersectedTriangle.normalMap) {
         vec3 pointNormal = colourToNormal(closestIntersection.pointColour, closestIntersection);
         float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
         window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
@@ -799,7 +861,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
     else if (event.key.keysym.sym == SDLK_3) cameraPosition = rot_x_axis(-PI/180) * cameraPosition;
     else if (event.key.keysym.sym == SDLK_4) cameraPosition = rot_x_axis(PI/180) * cameraPosition;
     else if (event.key.keysym.sym == SDLK_q) cameraOrientation = rot_y_axis(PI/180) * cameraOrientation;
-    else if (event.key.keysym.sym == SDLK_e) cameraOrientation = rot_y_axis(-PI/180) * cameraOrientation;
+    else if (event.key.keysym.sym == SDLK_e) cameraOrientation = rot_y_axis(-PI/180 * 90) * cameraOrientation;
     else if (event.key.keysym.sym == SDLK_z) cameraOrientation = rot_x_axis(PI/180) * cameraOrientation;
     else if (event.key.keysym.sym == SDLK_x) cameraOrientation = rot_x_axis(-PI/180) * cameraOrientation;
     else if (event.key.keysym.sym == SDLK_o) orbiting = !orbiting;
@@ -824,6 +886,12 @@ int main(int argc, char *argv[])
     textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
     textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
     textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
+    textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/left.ppm");
+    textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/bottom.ppm");
+    textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/back.ppm");
+    textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/right.ppm");
+    textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/top.ppm");
+    textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/front.ppm");
   }
 
   vector<vec3> lights {

@@ -16,6 +16,7 @@ struct ModelTriangle {
 	bool mirror;
 	bool shadows;
 	bool normalMap;
+	bool texture;
 
 	ModelTriangle();
 	ModelTriangle(const glm::vec3 &v0, const glm::vec3 &v1, const glm::vec3 &v2, Colour trigColour);
