@@ -734,7 +734,7 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
         if (rayIntersection.intersectedTriangle.mirror) {
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
-          RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
+          rayIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
         } else if (!rayIntersection.intersectedTriangle.colour.name.empty() && rayIntersection.hit) {
           uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
@@ -784,9 +784,13 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
         if (rayIntersection.intersectedTriangle.mirror) {
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
-          rayIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
-          rayIntersection.distanceFromCamera = t;
-        } else if (!rayIntersection.intersectedTriangle.colour.name.empty()) {
+          RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
+          if (reflectionIntersection.hit == false) {
+            rayIntersection.pointColour = envMapDirection(reflectionRay, TextureMaps);
+          } else {
+            rayIntersection = reflectionIntersection;
+          }
+        } else if (rayIntersection.intersectedTriangle.texture) {
           uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
           rayIntersection.u = u;
@@ -861,7 +865,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
     else if (event.key.keysym.sym == SDLK_3) cameraPosition = rot_x_axis(-PI/180) * cameraPosition;
     else if (event.key.keysym.sym == SDLK_4) cameraPosition = rot_x_axis(PI/180) * cameraPosition;
     else if (event.key.keysym.sym == SDLK_q) cameraOrientation = rot_y_axis(PI/180) * cameraOrientation;
-    else if (event.key.keysym.sym == SDLK_e) cameraOrientation = rot_y_axis(-PI/180 * 90) * cameraOrientation;
+    else if (event.key.keysym.sym == SDLK_e) cameraOrientation = rot_y_axis(-PI/180) * cameraOrientation;
     else if (event.key.keysym.sym == SDLK_z) cameraOrientation = rot_x_axis(PI/180) * cameraOrientation;
     else if (event.key.keysym.sym == SDLK_x) cameraOrientation = rot_x_axis(-PI/180) * cameraOrientation;
     else if (event.key.keysym.sym == SDLK_o) orbiting = !orbiting;
@@ -886,12 +890,18 @@ int main(int argc, char *argv[])
     textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
     textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
     textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
-    textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/left.ppm");
-    textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/bottom.ppm");
-    textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/back.ppm");
-    textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/right.ppm");
-    textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/top.ppm");
-    textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/front.ppm");
+    // textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/left.ppm");
+    // textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/bottom.ppm");
+    // textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/back.ppm");
+    // textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/right.ppm");
+    // textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/top.ppm");
+    // textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/front.ppm");
+    textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/negx.ppm");
+    textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/negy.ppm");
+    textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/negz.ppm");
+    textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/posx.ppm");
+    textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/posy.ppm");
+    textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/posz.ppm");
   }
 
   vector<vec3> lights {
