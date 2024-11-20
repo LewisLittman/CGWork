@@ -662,7 +662,6 @@ uint32_t getEnvMapPixelColour(float xRatio, float yRatio, const TextureMap& text
 
   float texturePixel = x + y * texture.width;
   return texture.pixels[texturePixel];
-
 }
 
 Colour envMapDirection(vec3 ray, unordered_map<string, TextureMap>& TextureMaps) {
