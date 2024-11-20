@@ -631,7 +631,7 @@ float normalMapIntensity(RayTriangleIntersection point, vec3 pointNormal, vec3 l
 
 int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vector<ModelTriangle> modelTriangles) {
   int blockedLights = 0;
-  for (int j = 0; j < lights.size(); j++) {
+  for (int j = 1; j < lights.size(); j++) {
     vec3 ray = lights[j] - intersection.intersectionPoint;
     bool lightBlocked = false;
     for (int i = 0; i < modelTriangles.size() && !lightBlocked; i++) {
@@ -653,6 +653,7 @@ int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vecto
       }
     }
   }
+  // cout << blockedLights << endl;
   return blockedLights;
 }
 
@@ -820,13 +821,13 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
       vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
-      int blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
+      int blockedLights = 0;
+      if (closestIntersection.hit) blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
       if (closestIntersection.hit == false) { //if we hit the env map
         Colour envMapColour = envMapDirection(rayDirection, TextureMaps);
         window.setPixelColour(x, y, pack_colour(envMapColour, 1));
-      } else if (closestIntersection.intersectedTriangle.shadows && blockedLights > 0 && !closestIntersection.intersectedTriangle.normalMap) { //if the point has shadows enabled and at least 1 light point is blocked
-        // float shadowIntensity = (lights.size() - blockedLights) * 0.05f; shit soft shadow code
-        float shadowIntensity = 0.2;
+      } else if (closestIntersection.intersectedTriangle.shadows && !closestIntersection.intersectedTriangle.normalMap && blockedLights > 0) { //if the point has shadows enabled and at least 1 light point is blocked
+        float shadowIntensity = 0.8f * (1.0f - static_cast<float>(blockedLights) / (static_cast<float>(lights.size()) - 1.0f)) + 0.2f;
         Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
       } else if (closestIntersection.intersectedTriangle.normalMap) {
@@ -835,11 +836,28 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
       } else {
         float intensity = phong(closestIntersection, vec3(0,1.2,0));
-        Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+        // Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+        Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1.0));
         window.setPixelColour(x, y, pack_colour(colour, 1.0));
       }
     }
   }
+}
+
+vector<vec3> generateLights(int gridSize, float spacing, vec3 centreLight) {
+  vector<vec3> lights;
+  lights.push_back(centreLight);
+  for (int x = 0; x < gridSize; x++) {
+    for (int z = 0; z < gridSize; z++) {
+      vec3 light = vec3(
+        centreLight.x + (static_cast<float>(x) - static_cast<float>(gridSize) / 2.00f) * spacing,
+        centreLight.y,
+        centreLight.z + (static_cast<float>(z) - static_cast<float>(gridSize) / 2.00f) * spacing
+      );
+      lights.push_back(light);
+    }
+  }
+  return lights;
 }
 
 void draw(DrawingWindow &window) {
@@ -903,13 +921,11 @@ int main(int argc, char *argv[])
     textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/posz.ppm");
   }
 
-  vector<vec3> lights {
-    vec3(0,1.2,0),
-    // vec3(-0.35, 1.2, -0.28),
-    // vec3(0.35, 1.2, -0.28),
-    // vec3(-0.35, 1.2, 0.28),
-    // vec3(0.35, 1.2, 0.28),
-  };
+  //soft shadow lights initialisation
+  float spacing = 0.035;
+  int gridSize = 16.00;
+  vec3 centrelight(0,1.5,0);
+  vector<vec3> lights = generateLights(gridSize, spacing, centrelight);
 
   vector<ModelTriangle> modelTriangles;
   reset_camera();
