@@ -17,6 +17,7 @@ struct ModelTriangle {
 	bool shadows;
 	bool normalMap;
 	bool texture;
+	bool glass;
 	int shadingMode;
 
 	ModelTriangle();
