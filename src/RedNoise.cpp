@@ -576,10 +576,8 @@ float phong(RayTriangleIntersection point, vec3 light) {
 }
 
 uint32_t texturePixel(RayTriangleIntersection point, const TextureMap& texture) {
-  ModelTriangle triangle = point.intersectedTriangle;
-
-  float x = (1 - point.u - point.v) * triangle.texturePoints[0].x + point.u * triangle.texturePoints[1].x + point.v * triangle.texturePoints[2].x;
-  float y = (1 - point.u - point.v) * triangle.texturePoints[0].y + point.u * triangle.texturePoints[1].y + point.v * triangle.texturePoints[2].y;
+  float x = (1 - point.u - point.v) * point.intersectedTriangle.texturePoints[0].x + point.u * point.intersectedTriangle.texturePoints[1].x + point.v * point.intersectedTriangle.texturePoints[2].x;
+  float y = (1 - point.u - point.v) * point.intersectedTriangle.texturePoints[0].y + point.u * point.intersectedTriangle.texturePoints[1].y + point.v * point.intersectedTriangle.texturePoints[2].y;
 
   x *= texture.width;
   y *= texture.height;
@@ -660,7 +658,6 @@ int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vecto
       }
     }
   }
-  // cout << blockedLights << endl;
   return blockedLights;
 }
 
@@ -742,7 +739,7 @@ RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vect
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
           rayIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection, TextureMaps);
-        } else if (!rayIntersection.intersectedTriangle.colour.name.empty() && rayIntersection.hit) {
+        } else if (rayIntersection.intersectedTriangle.texture) {
           uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
           rayIntersection.u = u;
