@@ -433,8 +433,8 @@ std::unordered_map<std::string, Colour> parseMtl(std::string filename) {
 CanvasPoint projectVertexOntoCanvasPoint(float focalLength, vec3 vertexPosition) {
   vec3 cameraToVertex = cameraPosition - vertexPosition;
   vec3 adjustedVector =  cameraToVertex * cameraOrientation;
-  float u = -focalLength * (adjustedVector.x / adjustedVector.z) * 100 + WIDTH / 2;
-  float v = focalLength * (adjustedVector.y / adjustedVector.z) * 100 + HEIGHT / 2;
+  float u = -focalLength * (adjustedVector.x / adjustedVector.z) * WIDTH / 2 + WIDTH / 2;
+  float v = focalLength * (adjustedVector.y / adjustedVector.z) * HEIGHT / 2 + HEIGHT / 2;
   CanvasPoint projectedVertex = CanvasPoint(u, v, 1/adjustedVector.z);
   return projectedVertex;
 }
@@ -822,7 +822,7 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
     for (int y = 0; y < HEIGHT; y++) {
       float xT = x - WIDTH / 2;
       float yT = HEIGHT / 2 - y;
-      vec3 transposedPoint = vec3(xT * 1/100, yT * 1/100, -focalLength);
+      vec3 transposedPoint = vec3(xT / (WIDTH / 2) , yT / (HEIGHT / 2), -focalLength);
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
       int blockedLights = 0;
@@ -949,14 +949,14 @@ int main(int argc, char *argv[])
   vector<ModelTriangle> modelTriangles;
   reset_camera();
   if (textureToggle) {
-    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.6, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
+    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
   } else {
-    modelTriangles = parseObj("../models/cornell-box.obj", 0.6, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
+    modelTriangles = parseObj("../models/cornell-box.obj", 0.3, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
   }
-  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.4, parseMtl("../models/normal_map_cube.mtl"), vec3(-1.2, -1.25, 1), true, NONE);
-  vector<ModelTriangle> woodTopTriangles = parseObj("../models/wood-top.obj", 0.4, parseMtl("../models/wood-top.mtl"), vec3(-1.2, -1.25, 1), true, NONE);
+  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.2, parseMtl("../models/normal_map_cube.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
+  vector<ModelTriangle> woodTopTriangles = parseObj("../models/wood-top.obj", 0.2, parseMtl("../models/wood-top.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
   // vector<ModelTriangle> lightCubeTriangles = parseObj("../models/light_cube.obj", 0.1, parseMtl("../models/normal_map_cube.mtl"), lights[0], false, NONE);
-  // vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.7, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false, PHONG);
+  // vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.35, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false, PHONG);
   // modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
   modelTriangles.insert(modelTriangles.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
   modelTriangles.insert(modelTriangles.end(), woodTopTriangles.begin(), woodTopTriangles.end());
