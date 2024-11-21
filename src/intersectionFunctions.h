@@ -6,3 +6,5 @@
 #define INTERSECTIONFUNCTIONS_H
 
 #endif //INTERSECTIONFUNCTIONS_H
+RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, std::vector<ModelTriangle> modelTriangles,
+    vec3 rayOrigin, std::unordered_map<std::string, TextureMap>& TextureMaps, int recursionCount);
