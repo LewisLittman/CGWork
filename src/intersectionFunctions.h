@@ -1,0 +1,8 @@
+//
+// Created by ok22037 on 21/11/24.
+//
+
+#ifndef INTERSECTIONFUNCTIONS_H
+#define INTERSECTIONFUNCTIONS_H
+
+#endif //INTERSECTIONFUNCTIONS_H
