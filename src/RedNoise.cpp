@@ -793,6 +793,7 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
             rayIntersection.pointColour = envMapDirection(reflectionRay, TextureMaps);
           } else {
             rayIntersection = reflectionIntersection;
+            rayIntersection.distanceFromCamera = t;
           }
         } else if (rayIntersection.intersectedTriangle.texture) {
           uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
