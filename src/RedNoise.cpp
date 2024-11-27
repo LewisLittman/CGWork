@@ -30,7 +30,7 @@ mat3 cameraOrientation;
 const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
-int renderMode;
+int renderMode = -1;
 bool textureToggle;
 
 enum ShadingMode {
@@ -1010,6 +1010,28 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
   }
 }
 
+void animation(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
+  int frames = 0;
+  draw(window);
+
+  while (frames < 50)
+  {
+    window.clearPixels();
+    if (frames < 25) { //Wire Frame Scene (orbits wireframe)
+      wireFrameRender(2.0, window, modelTriangles);
+      cameraPosition = rot_y_axis(-2 * PI / 25) * cameraPosition;
+      lookAtPoint(vec3(0,0,0));
+    } else if (frames < 50 && frames >= 25) { //Rasterised Frame Scene (orbits rasterised render)
+      rasterisedRender(2.0, window, modelTriangles);
+      cameraPosition = rot_y_axis(-2 * PI / 25) * cameraPosition;
+      lookAtPoint(vec3(0,0,0));
+    }
+    window.renderFrame();
+    std::cout << "Saving frame " << frames << " to PPM..." << std::endl;
+    window.savePPM("../output/"+to_string(frames)+".ppm");
+    frames++;
+  }
+}
 
 int main(int argc, char *argv[])
 {
@@ -1064,6 +1086,7 @@ int main(int argc, char *argv[])
   // modelTriangles.insert(modelTriangles.end(), lightCubeTriangles.begin(), lightCubeTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
+  animation(2.0, window, modelTriangles);
   while (true) {
     // We MUST poll for events - otherwise the window will freeze !
     if (window.pollForInputEvents(event)) handleEvent(event, window, lights);
