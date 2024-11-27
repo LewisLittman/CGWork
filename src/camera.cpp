@@ -24,7 +24,7 @@ mat3 rot_x_axis(float r) {
     return mat3(vec3( 1.0,    0.0,    0.0),vec3( 0.0, cos(r), sin(r)),vec3( 0.0, -sin(r), cos(r)));
 }
 
-void lookAt(vec3 point) {
+void lookAtPoint(vec3 point) {
     vec3 forward = normalize(cameraPosition - point);
     vec3 right = normalize(cross(vec3(0.0,1.0,0.0), forward));
     vec3 up = cross(forward, right);
@@ -36,6 +36,6 @@ void lookAt(vec3 point) {
 void orbit(bool orbiting) {
     if (orbiting) {
         cameraPosition = rot_y_axis(-PI/180) * cameraPosition;
-        lookAt(vec3(0,0,0));
+        lookAtPoint(vec3(0,0,0));
     }
 }

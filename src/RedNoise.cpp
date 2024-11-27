@@ -4,6 +4,7 @@
 #include <Utils.h>
 #include <fstream>
 #include <vector>
+#include <thread>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
 #include <CanvasPoint.h>
@@ -916,6 +917,78 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
   return rayIntersection;
 }
 
+void rayTraceRenderMultiThread(float focalLength, DrawingWindow &window, const vector<ModelTriangle> &modelTriangles,
+                    unordered_map<string, TextureMap> &TextureMaps, const vector<vec3> &lights) {
+    // Number of threads to use (based on hardware concurrency)
+    const int numThreads = std::thread::hardware_concurrency();
+    const int chunkSize = WIDTH / numThreads; // Divide the screen into chunks for each thread
+
+    // Worker function for each thread
+    auto renderChunk = [&](int startX, int endX) {
+        for (int x = startX; x < endX; x++) {
+            for (int y = 0; y < HEIGHT; y++) {
+                float xT = x - WIDTH / 2;
+                float yT = HEIGHT / 2 - y;
+                vec3 transposedPoint = vec3(xT / (WIDTH / 2), yT / (HEIGHT / 2), -focalLength);
+                vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
+                RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
+
+                int blockedLights = 0;
+                if (closestIntersection.hit)
+                    blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
+
+                float shadowIntensity = 1.0f;
+                if (closestIntersection.intersectedTriangle.shadows && !closestIntersection.intersectedTriangle.normalMap &&
+                    blockedLights > 0) {
+                    shadowIntensity = 0.8f * (1.0f - static_cast<float>(blockedLights) / (static_cast<float>(lights.size()) - 1.0f)) +
+                                      0.2f;
+                }
+
+                if (!closestIntersection.hit) {
+                    // If we hit the environment map
+                    Colour envMapColour = envMapDirection(rayDirection, TextureMaps);
+                    window.setPixelColour(x, y, pack_colour(envMapColour, 1));
+                } else if (closestIntersection.intersectedTriangle.normalMap) {
+                    vec3 pointNormal = colourToNormal(closestIntersection.pointColour, closestIntersection);
+                    float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
+                    window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
+                } else {
+                    float intensity = 0.0f;
+                    Colour colour;
+
+                    if (closestIntersection.intersectedTriangle.shadingMode == PHONG) {
+                        intensity = phong(closestIntersection, lights[0]);
+                        colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+                    } else if (closestIntersection.intersectedTriangle.shadingMode == GOURAD) {
+                        intensity = gourad(closestIntersection, lights[0]);
+                        colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+                    } else if (closestIntersection.intersectedTriangle.shadingMode == NONE) {
+                        intensity = combinedLighting(closestIntersection, lights[0]);
+                        colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+                    }
+
+                    window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+                }
+            }
+        }
+    };
+
+    // Vector to hold threads
+    std::vector<std::thread> threads;
+
+    // Create threads
+    for (int i = 0; i < numThreads; i++) {
+        int startX = i * chunkSize;
+        int endX = (i == numThreads - 1) ? WIDTH : startX + chunkSize; // Last thread handles any remainder
+        threads.emplace_back(renderChunk, startX, endX);
+    }
+
+    // Join threads
+    for (auto &t : threads) {
+        t.join();
+    }
+}
+
 void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles, unordered_map<string, TextureMap>& TextureMaps, vector<vec3> lights) {
   for (int x = 0; x < WIDTH; x++) {
     for (int y = 0; y < HEIGHT; y++) {
@@ -1010,11 +1083,35 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
   }
 }
 
-void animation(float focalLength, DrawingWindow &window, vector<ModelTriangle> modelTriangles) {
+void animation(float focalLength, DrawingWindow &window) {
   int frames = 0;
-  draw(window);
 
-  while (frames < 50)
+  vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.3, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
+  vector<ModelTriangle> rayTraceScene1 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
+  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.35, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false, PHONG);
+
+  unordered_map<string, TextureMap> textures;
+  textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
+  textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
+  textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
+  textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/negx.ppm");
+  textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/negy.ppm");
+  textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/negz.ppm");
+  textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/posx.ppm");
+  textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/posy.ppm");
+  textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/posz.ppm");
+  bool softShadows = false;
+  float spacing = 0.035;
+  int gridSize = 16.00;
+  vec3 centrelight(0,1.3,0);
+  vector<vec3> lights;
+  if (softShadows) {
+    lights = generateLights(gridSize, spacing, centrelight);
+  } else {
+    lights.push_back(centrelight);
+  }
+  draw(window);
+  while (frames < 200)
   {
     window.clearPixels();
     if (frames < 25) { //Wire Frame Scene (orbits wireframe)
@@ -1025,6 +1122,16 @@ void animation(float focalLength, DrawingWindow &window, vector<ModelTriangle> m
       rasterisedRender(2.0, window, modelTriangles);
       cameraPosition = rot_y_axis(-2 * PI / 25) * cameraPosition;
       lookAtPoint(vec3(0,0,0));
+    } else if (frames >= 50 && frames < 60) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene1, textures, lights);
+    } else if (frames >= 60 && frames < 120) {
+      float temp_c = frames+1;
+      float temp_c1 = 120-frames;
+      // cout << temp_c << endl;
+      cameraPosition.z -= 0.25*(1/temp_c1);//0.0125;
+      cameraPosition.x += 0.25*(1/temp_c);//steps_48[i];//temp_c;
+      lookAtPoint(vec3(0,0,0));
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene1, textures, lights);
     }
     window.renderFrame();
     std::cout << "Saving frame " << frames << " to PPM..." << std::endl;
@@ -1041,12 +1148,6 @@ int main(int argc, char *argv[])
     textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
     textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
     textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
-    // textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/left.ppm");
-    // textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/bottom.ppm");
-    // textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/back.ppm");
-    // textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/right.ppm");
-    // textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/top.ppm");
-    // textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/front.ppm");
     textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/negx.ppm");
     textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/negy.ppm");
     textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/negz.ppm");
@@ -1086,7 +1187,7 @@ int main(int argc, char *argv[])
   // modelTriangles.insert(modelTriangles.end(), lightCubeTriangles.begin(), lightCubeTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
-  animation(2.0, window, modelTriangles);
+  animation(2.0, window);
   while (true) {
     // We MUST poll for events - otherwise the window will freeze !
     if (window.pollForInputEvents(event)) handleEvent(event, window, lights);
