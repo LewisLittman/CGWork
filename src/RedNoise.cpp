@@ -31,7 +31,7 @@ mat3 cameraOrientation;
 const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
-int renderMode = 0;
+int renderMode = 1;
 bool textureToggle;
 bool softShadows;
 
@@ -338,8 +338,8 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
   std::string line;
   std::vector<ModelTriangle> triangles;
   std::vector<vec3> vertices;
-  std::vector<vec3> vertexNormals; // vector to store normals for each vertex
-  vector<TexturePoint> texture_points; // vector to store texture points for each triangle
+  std::vector<vec3> vertexNormals;
+  vector<TexturePoint> texturePoints;
   std::string colour;
   string name;
   while (std::getline(File, line)) {
@@ -351,9 +351,9 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           vec3 vertex(stof(values[1]) * scale, stof(values[2]) * scale, stof(values[3]) * scale);
           vertex += offset;
           vertices.push_back(vertex);
-          vertexNormals.emplace_back(0.0f, 0.0f, 0.0f); // Initialize normals to zero
+          vertexNormals.emplace_back(0.0f, 0.0f, 0.0f);
       } else if (values[0] == "vt") {
-          texture_points.push_back(TexturePoint(stof(values[1]), stof(values[2])));
+          texturePoints.push_back(TexturePoint(stof(values[1]), stof(values[2])));
       } else if (values[0] == "f") {
           int i1 = std::stoi(values[1]) - 1;
           int i2 = std::stoi(values[2]) - 1;
@@ -382,9 +382,9 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
             triangle.texture = true;
           }
           if (v1.size() > 1 && !v1[1].empty() && v2.size() > 1 && !v2[1].empty() && v3.size() > 1 && !v3[1].empty()) {
-            triangle.texturePoints[0] = texture_points[stoi(v1[1]) - 1];
-            triangle.texturePoints[1] = texture_points[stoi(v2[1]) - 1];
-            triangle.texturePoints[2] = texture_points[stoi(v3[1]) - 1];
+            triangle.texturePoints[0] = texturePoints[stoi(v1[1]) - 1];
+            triangle.texturePoints[1] = texturePoints[stoi(v2[1]) - 1];
+            triangle.texturePoints[2] = texturePoints[stoi(v3[1]) - 1];
           }
           triangles.push_back(triangle);
           // Calculate face normal and add it to vertex normals
@@ -693,31 +693,31 @@ Colour envMapDirection(vec3 ray, unordered_map<string, TextureMap>& TextureMaps)
     if (rayDirection.x > 0) { // ray will hit right wall
       xRatio = (rayDirection.z / abs(rayDirection.x) + 1 )/ 2;
       yRatio = (-rayDirection.y / abs(rayDirection.x) + 1) / 2;
-      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/px.ppm"]);
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["./models/env-map/px.ppm"]);
     } else { //ray will hit left wall
       xRatio = (-rayDirection.z / abs(rayDirection.x) + 1 )/ 2;
       yRatio = (-rayDirection.y / abs(rayDirection.x) + 1) / 2;
-      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/nx.ppm"]);
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["./models/env-map/nx.ppm"]);
     }
   } else if (largestValue == fabs(rayDirection.y)) { //ray will hit top or bottom wall
     if (rayDirection.y > 0) { // ray will hit top wall
       xRatio = (rayDirection.x / abs(rayDirection.y) + 1 )/ 2;
       yRatio = (-rayDirection.z / abs(rayDirection.y) + 1) / 2;
-      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/py.ppm"]);
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["./models/env-map/py.ppm"]);
     } else { //ray will hit bottom wall (correct orientation)
       xRatio = (rayDirection.x / abs(rayDirection.y) + 1 )/ 2;
       yRatio = (rayDirection.z / abs(rayDirection.y) + 1) / 2;
-      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/ny.ppm"]);
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["./models/env-map/ny.ppm"]);
     }
   } else if (largestValue == fabs(rayDirection.z)) { //ray will hit front or back wall
     if (rayDirection.z > 0) { // ray will hit back wall
       xRatio = (-rayDirection.x / abs(rayDirection.z) + 1 )/ 2;
       yRatio = (-rayDirection.y / abs(rayDirection.z) + 1) / 2;
-      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/nz.ppm"]);
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["./models/env-map/nz.ppm"]);
     } else { //ray will hit front wall (correct orientation)
       xRatio = (rayDirection.x / abs(rayDirection.z) + 1 )/ 2;
       yRatio = (-rayDirection.y / abs(rayDirection.z) + 1) / 2;
-      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["../models/env-map/pz.ppm"]);
+      envPixelColour = getEnvMapPixelColour(xRatio, yRatio, TextureMaps["./models/env-map/pz.ppm"]);
     }
   }
   return convert_colour_type(envPixelColour);
@@ -1017,40 +1017,24 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
   }
 }
 
-// Helper functions
-vec3 lerp(const vec3 start, const vec3 end, float t) {
-  return t * (end - start);
+mat3 interpolateOrientation(const mat3 start, const mat3 end, float t) {
+  quat quatStart = quat_cast(start);
+  quat quatEnd = quat_cast(end);
+  quat quatInterpolated = slerp(quatStart, quatEnd, t);
+  return mat3_cast(quatInterpolated);
 }
-
-// Ease In-Out Cubic for non-linear motion
-float easeInOutCubic(float t) {
-  return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;
-}
-
-glm::mat3 interpolateOrientation(const glm::mat3& start, const glm::mat3& end, float t) {
-  // Convert 3x3 matrices to quaternions
-  glm::quat quatStart = glm::quat_cast(start);
-  glm::quat quatEnd = glm::quat_cast(end);
-
-  // Perform SLERP interpolation
-  glm::quat quatInterpolated = glm::slerp(quatStart, quatEnd, t);
-
-  // Convert quaternion back to 3x3 matrix
-  return glm::mat3_cast(quatInterpolated);
-}
-
 
 void animation(float focalLength, DrawingWindow &window) {
   unordered_map<string, TextureMap> textures;
-  textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
-  textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
-  textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
-  textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/negx.ppm");
-  textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/negy.ppm");
-  textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/negz.ppm");
-  textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/posx.ppm");
-  textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/posy.ppm");
-  textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/posz.ppm");
+  textures["./models/texture.ppm"] = TextureMap("./models/texture.ppm");
+  textures["./models/brick_normal_map.ppm"] = TextureMap("./models/brick_normal_map.ppm");
+  textures["./models/WoodTexture.ppm"] = TextureMap("./models/WoodTexture.ppm");
+  textures["./models/env-map/nx.ppm"] = TextureMap("./models/env-map/negx.ppm");
+  textures["./models/env-map/ny.ppm"] = TextureMap("./models/env-map/negy.ppm");
+  textures["./models/env-map/nz.ppm"] = TextureMap("./models/env-map/negz.ppm");
+  textures["./models/env-map/px.ppm"] = TextureMap("./models/env-map/posx.ppm");
+  textures["./models/env-map/py.ppm"] = TextureMap("./models/env-map/posy.ppm");
+  textures["./models/env-map/pz.ppm"] = TextureMap("./models/env-map/posz.ppm");
 
   vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.3, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
   vector<ModelTriangle> rayTraceScene1 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
@@ -1088,7 +1072,7 @@ void animation(float focalLength, DrawingWindow &window) {
 
 
   softShadows = true;
-  float spacing = 0.035 / 2.0f;
+  float spacing = 0.035 / 1.5f;
   int gridSize = 8.00;
   vec3 centrelight(0,0.8,0);
   vector<vec3> lights;
@@ -1167,13 +1151,20 @@ void animation(float focalLength, DrawingWindow &window) {
       if (softShadows == false) lights = generateLights(gridSize, spacing, centrelight);
       if (softShadows == false) softShadows = true;
       rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
-      lights[0].x -= 0.02;
+      for (int i = 0; i < lights.size(); i++) {
+        lights[i].x -= 0.02;
+      }
+
     } else if (frames >= 340 && frames < 370) {
       rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
-      lights[0].x += 0.02;
+      for (int i = 0; i < lights.size(); i++) {
+        lights[i].x += 0.02;
+      }
     } else if (frames >= 370 && frames < 386) {
       rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
-      lights[0].x -= 0.02;
+      for (int i = 0; i < lights.size(); i++) {
+        lights[i].x -= 0.02;
+      }
     }
     window.renderFrame();
     std::cout << "Saving frame " << frames << " to PPM..." << std::endl;
@@ -1187,15 +1178,15 @@ int main(int argc, char *argv[])
   textureToggle = true; //toggle on and off texture mapping
   unordered_map<string, TextureMap> textures;
   if (textureToggle) { //if textures are on map them to the textureMap objects
-    textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
-    textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
-    textures["../models/WoodTexture.ppm"] = TextureMap("../models/WoodTexture.ppm");
-    textures["../models/env-map/nx.ppm"] = TextureMap("../models/env-map/negx.ppm");
-    textures["../models/env-map/ny.ppm"] = TextureMap("../models/env-map/negy.ppm");
-    textures["../models/env-map/nz.ppm"] = TextureMap("../models/env-map/negz.ppm");
-    textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/posx.ppm");
-    textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/posy.ppm");
-    textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/posz.ppm");
+    textures["./models/texture.ppm"] = TextureMap("./models/texture.ppm");
+    textures["./models/brick_normal_map.ppm"] = TextureMap("./models/brick_normal_map.ppm");
+    textures["./models/WoodTexture.ppm"] = TextureMap("./models/WoodTexture.ppm");
+    textures["./models/env-map/nx.ppm"] = TextureMap("./models/env-map/negx.ppm");
+    textures["./models/env-map/ny.ppm"] = TextureMap("./models/env-map/negy.ppm");
+    textures["./models/env-map/nz.ppm"] = TextureMap("./models/env-map/negz.ppm");
+    textures["./models/env-map/px.ppm"] = TextureMap("./models/env-map/posx.ppm");
+    textures["./models/env-map/py.ppm"] = TextureMap("./models/env-map/posy.ppm");
+    textures["./models/env-map/pz.ppm"] = TextureMap("./models/env-map/posz.ppm");
   }
 
   //soft shadow lights initialisation
@@ -1212,15 +1203,15 @@ int main(int argc, char *argv[])
   vector<ModelTriangle> modelTriangles;
   reset_camera();
   if (textureToggle) {
-    modelTriangles = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
+    modelTriangles = parseObj("./models/textured-cornell-box.obj", 0.3, parseMtl("./models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
   } else {
-    modelTriangles = parseObj("../models/cornell-box.obj", 0.3, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
+    modelTriangles = parseObj("./models/cornell-box.obj", 0.3, parseMtl("./models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
   }
-  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.2, parseMtl("../models/normal_map_cube.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
-  vector<ModelTriangle> woodTopTriangles = parseObj("../models/wood-top.obj", 0.2, parseMtl("../models/wood-top.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
-  // vector<ModelTriangle> lightCubeTriangles = parseObj("../models/light_cube.obj", 0.1, parseMtl("../models/normal_map_cube.mtl"), lights[0], false, NONE);
-  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(-0.5,0.05,-0.80), false, PHONG);
-  vector<ModelTriangle> lpbunnyTriangles = parseObj("../models/lpbunny.obj", 0.25, parseMtl("../models/lpbunny.mtl"), vec3(0.05,-0.05,0.05), false, NONE);
+  vector<ModelTriangle> normalCubeTriangles = parseObj("./models/normal_map_cube.obj", 0.2, parseMtl("./models/normal_map_cube.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
+  vector<ModelTriangle> woodTopTriangles = parseObj("./models/wood-top.obj", 0.2, parseMtl("./models/wood-top.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
+  // vector<ModelTriangle> lightCubeTriangles = parseObj("./models/light_cube.obj", 0.1, parseMtl("./models/normal_map_cube.mtl"), lights[0], false, NONE);
+  vector<ModelTriangle> sphereTriangles = parseObj("./models/sphere.obj", 0.30, parseMtl("./models/sphere.mtl"), vec3(-0.5,0.05,-0.80), false, PHONG);
+  vector<ModelTriangle> lpbunnyTriangles = parseObj("./models/lpbunny.obj", 0.25, parseMtl("./models/lpbunny.mtl"), vec3(0.05,-0.05,0.05), false, NONE);
   modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
   modelTriangles.insert(modelTriangles.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
   modelTriangles.insert(modelTriangles.end(), woodTopTriangles.begin(), woodTopTriangles.end());
@@ -1228,7 +1219,7 @@ int main(int argc, char *argv[])
   // modelTriangles.insert(modelTriangles.end(), lightCubeTriangles.begin(), lightCubeTriangles.end());
   DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
   SDL_Event event;
-  animation(2.0, window);
+  // animation(2.0, window);
   while (true) {
     // We MUST poll for events - otherwise the window will freeze !
     if (window.pollForInputEvents(event)) handleEvent(event, window, lights);

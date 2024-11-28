@@ -24,4 +24,4 @@ Kd 0.000000 1.000000 1.000000
 
 newmtl NormalMap
 Kd 1.000000 0.000000 0.000000
-map_Kd ../models/brick_normal_map.ppm
+map_Kd ./models/brick_normal_map.ppm
