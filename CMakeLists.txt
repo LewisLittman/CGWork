@@ -21,6 +21,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(GLM_INCLUDE_DIRS libs/glm-0.9.7.2)
 
 find_package(SDL2 REQUIRED)
+find_package(Threads REQUIRED)
 
 include_directories(${SDL2_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS})
 include_directories(libs/sdw)
@@ -37,7 +38,8 @@ add_executable(RedNoise
         libs/sdw/Utils.cpp
         src/RedNoise.cpp
         src/camera.cpp
-        src/camera.h)
+        src/camera.h
+        src/intersectionFunctions.h)
 
 if (MSVC)
     target_compile_options(RedNoise
@@ -73,4 +75,4 @@ target_compile_options(RedNoise PUBLIC "$<$<CONFIG:RelWithDebInfo>:${RELEASE_OPT
 target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Release>:${RELEASE_OPTIONS}>")
 target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Debug>:${DEBUG_OPTIONS}>")
  
-target_link_libraries(RedNoise PRIVATE ${SDL2_LIBRARIES})
+target_link_libraries(RedNoise PRIVATE ${SDL2_LIBRARIES} Threads::Threads)
