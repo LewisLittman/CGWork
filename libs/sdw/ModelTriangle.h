@@ -17,8 +17,9 @@ struct ModelTriangle {
 	bool shadows;
 	bool normalMap;
 	bool texture;
-	bool glass;
+	bool metal;
 	int shadingMode;
+	std::string name;
 
 	ModelTriangle();
 	ModelTriangle(const glm::vec3 &v0, const glm::vec3 &v1, const glm::vec3 &v2, Colour trigColour);

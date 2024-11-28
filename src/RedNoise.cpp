@@ -18,8 +18,8 @@
 #include "intersectionFunctions.h"
 
 
-#define WIDTH 600
-#define HEIGHT 600
+#define WIDTH 640
+#define HEIGHT 480
 
 
 using namespace glm;
@@ -31,8 +31,9 @@ mat3 cameraOrientation;
 const double PI = 3.14159265358979323846;
 bool orbiting;
 float focalLength;
-int renderMode = -1;
+int renderMode = 0;
 bool textureToggle;
+bool softShadows;
 
 enum ShadingMode {
   NONE = 0,
@@ -340,11 +341,13 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
   std::vector<vec3> vertexNormals; // vector to store normals for each vertex
   vector<TexturePoint> texture_points; // vector to store texture points for each triangle
   std::string colour;
-
+  string name;
   while (std::getline(File, line)) {
       if (line.empty()) continue;
       std::vector<std::string> values = split(line, ' ');
-      if (values[0] == "v") {
+      if (values[0] == "o") {
+          name = values[1];
+      } else if (values[0] == "v") {
           vec3 vertex(stof(values[1]) * scale, stof(values[2]) * scale, stof(values[3]) * scale);
           vertex += offset;
           vertices.push_back(vertex);
@@ -363,9 +366,13 @@ std::vector<ModelTriangle> parseObj(std::string filename, float scale, std::unor
           triangle.shadingMode = shadingMode;
           if (colour == "Mirror") {
             triangle.mirror = true;
+            cout << colour << endl;
           }
-          if (colour == "Glass") {
-            triangle.glass = true;
+          if (name == "light") {
+            triangle.name = name;
+          }
+          if (colour == "Metal") {
+            triangle.metal = true;
           }
           if (colour == "NormalMap") {
             triangle.normalMap = true;
@@ -439,7 +446,7 @@ CanvasPoint projectVertexOntoCanvasPoint(float focalLength, vec3 vertexPosition)
   vec3 cameraToVertex = cameraPosition - vertexPosition;
   vec3 adjustedVector =  cameraToVertex * cameraOrientation;
   float u = -focalLength * (adjustedVector.x / adjustedVector.z) * WIDTH / 2 + WIDTH / 2;
-  float v = focalLength * (adjustedVector.y / adjustedVector.z) * HEIGHT / 2 + HEIGHT / 2;
+  float v = focalLength * (adjustedVector.y / adjustedVector.z) * WIDTH / 2 + HEIGHT / 2;
   CanvasPoint projectedVertex = CanvasPoint(u, v, 1/adjustedVector.z);
   return projectedVertex;
 }
@@ -512,10 +519,10 @@ float specularLighting(RayTriangleIntersection point, vec3 light) {
 }
 
 float combinedLighting(RayTriangleIntersection point, vec3 light) {
-  float proximityLightingIntensity = proximityLighting(point, light, 20);
+  float proximityLightingIntensity = proximityLighting(point, light, 10);
   float AoILightIntensity = AoILighting(point, light);
   float specularLightingIntensity = specularLighting(point, light);
-  float combinedIntensity = 0.4 * proximityLightingIntensity + 0.7 * AoILightIntensity + 0.5 * specularLightingIntensity;
+  float combinedIntensity = 0.2 * proximityLightingIntensity + 0.7 * AoILightIntensity + 0.5 * specularLightingIntensity;
   if (combinedIntensity < 0.2) return 0.2;
   if (combinedIntensity > 1) return 1;
   return combinedIntensity;
@@ -544,7 +551,7 @@ float gourad(RayTriangleIntersection point, vec3 light) {
     if (specIntensity > 1) specIntensity = 1;
     if (specIntensity < 0) specIntensity = 0;
 
-    float combinedIntensity = 0.6 * proxIntensity + 0.7 * AoIintensity + 0.4 * specIntensity;
+    float combinedIntensity = 0.2 * proxIntensity + 0.7 * AoIintensity + 0.4 * specIntensity;
     if (combinedIntensity < 0.2) combinedIntensity = 0.2;
     if (combinedIntensity > 1) combinedIntensity = 1;
     brightness.push_back(combinedIntensity);
@@ -558,7 +565,7 @@ float phong(RayTriangleIntersection point, vec3 light) {
   // pointNormal = normalize(pointNormal);
   //proximity lighting for the point
   float distance = length(light - point.intersectionPoint);
-  float proxIntensity = 20 / (4 * PI * distance * distance); //20 = light strength
+  float proxIntensity = 10 / (4 * PI * distance * distance); //20 = light strength
   if (proxIntensity > 1) proxIntensity = 1;
   if (proxIntensity < 0) proxIntensity = 0;
   //AoI lighting for the point
@@ -574,7 +581,7 @@ float phong(RayTriangleIntersection point, vec3 light) {
   if (specIntensity > 1) specIntensity = 1;
   if (specIntensity < 0) specIntensity = 0;
 
-  float combinedIntensity = 0.7 * proxIntensity + 0.5 * AoIintensity + 0.3 * specIntensity;
+  float combinedIntensity = 0.3 * proxIntensity + 0.5 * AoIintensity + 0 * specIntensity;
   if (combinedIntensity < 0.2) combinedIntensity = 0.2;
   if (combinedIntensity > 1) combinedIntensity = 1;
   return combinedIntensity;
@@ -641,11 +648,12 @@ float normalMapIntensity(RayTriangleIntersection point, vec3 pointNormal, vec3 l
 
 int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vector<ModelTriangle> modelTriangles) {
   int blockedLights = 0;
-  for (int j = 1; j < lights.size(); j++) {
+  for (int j = 0; j < lights.size(); j++) {
     vec3 ray = lights[j] - intersection.intersectionPoint;
     bool lightBlocked = false;
     for (int i = 0; i < modelTriangles.size() && !lightBlocked; i++) {
       ModelTriangle triangle = modelTriangles[i];
+      if (triangle.name == "light") continue;
       vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
       vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
       vec3 SPVector = intersection.intersectionPoint - triangle.vertices[0];
@@ -656,7 +664,7 @@ int checkShadow(RayTriangleIntersection intersection, vector<vec3> lights, vecto
       float v = possibleSolution.z;
 
       if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-        if (t < length(ray) && t > 0.01 && intersection.triangleIndex != i) {
+        if (t < length(ray) && t > 0.0 && intersection.triangleIndex != i) {
           lightBlocked = true;
           blockedLights++;
         }
@@ -713,91 +721,6 @@ Colour envMapDirection(vec3 ray, unordered_map<string, TextureMap>& TextureMaps)
     }
   }
   return convert_colour_type(envPixelColour);
-}
-
-Colour fresnelBlend(Colour reflectionColor, Colour refractionColor, vec3 rayDirection, vec3 faceNormal, float refractionIndex) {
-  // Compute F0 (reflection coefficient at normal incidence)
-  float F0 = pow((1.0 - refractionIndex) / (1.0 + refractionIndex), 2.0);
-
-  // Compute cosine of the angle between ray and normal
-  float cosTheta = clamp(dot(-rayDirection, faceNormal), 0.00f, 1.00f);
-
-  // Fresnel term using Schlick's approximation
-  float fresnelReflectance = F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
-
-  // Blend the reflection and refraction colors
-  Colour blend = Colour(reflectionColor.red * fresnelReflectance + (1.0f - fresnelReflectance) * refractionColor.red,
-                        reflectionColor.blue * fresnelReflectance + (1.0f - fresnelReflectance) * refractionColor.blue,
-                        reflectionColor.green * fresnelReflectance + (1.0f - fresnelReflectance) * refractionColor.green);
-  return blend;
-}
-
-vec3 getRefractionRay(vec3 rayDirection, vec3 faceNormal, float refractionIndex) {
-  float cosThetaI = clamp(dot(-rayDirection, faceNormal), -1.00f, 1.00f);
-  float eta = refractionIndex;
-
-  // Check if we are inside or outside the material
-  vec3 normal = faceNormal;
-  if (cosThetaI < 0.0) {
-    // Ray is inside the material, invert the normal
-    cosThetaI = -cosThetaI;
-    eta = 1.0 / refractionIndex;
-    normal = -faceNormal;
-  }
-
-  float k = 1.0 - eta * eta * (1.0 - cosThetaI * cosThetaI);
-  if (k < 0.0) {
-    // Total internal reflection (no refraction)
-    return vec3(0.0);
-  }
-
-  return normalize(eta * rayDirection + (eta * cosThetaI - sqrt(k)) * normal);
-}
-
-RayTriangleIntersection refractionGetClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, vec3 rayOrigin, unordered_map<string, TextureMap>& TextureMaps, int recursionCount) {
-  RayTriangleIntersection rayIntersection;
-  rayIntersection.hit = false;
-  rayIntersection.distanceFromCamera = numeric_limits<float>::infinity();
-  for (int i = 0; i < modelTriangles.size(); i++)
-  {
-    // get the closest intersection information
-    ModelTriangle triangle = modelTriangles[i];
-    vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
-    vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
-    vec3 SPVector = rayOrigin - triangle.vertices[0];
-    mat3 DEMatrix(-rayDirection, e0, e1);
-    vec3 possibleSolution = inverse(DEMatrix) * SPVector;
-    float t = possibleSolution.x;
-    float u = possibleSolution.y;
-    float v = possibleSolution.z;
-
-    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-      if (t < rayIntersection.distanceFromCamera && t > 0.00001) {
-        rayIntersection.hit = true;
-        rayIntersection.distanceFromCamera = t;
-        rayIntersection.triangleIndex = i;
-        rayIntersection.intersectedTriangle = triangle;
-        rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
-        rayIntersection.u = u;
-        rayIntersection.v = v;
-        rayIntersection.pointColour = rayIntersection.intersectedTriangle.colour;
-      }
-    }
-  }
-
-  if (recursionCount == 20) {
-    rayIntersection.pointColour = envMapDirection(rayDirection, TextureMaps);
-    return rayIntersection;
-  }
-  if (rayIntersection.intersectedTriangle.glass) {
-    vec3 refractionRay = getRefractionRay(rayDirection, rayIntersection.intersectedTriangle.normal, 1.30f);
-    rayIntersection = refractionGetClosestIntersection(refractionRay, modelTriangles, rayIntersection.intersectionPoint, TextureMaps, recursionCount++);
-  } else if (rayIntersection.intersectedTriangle.mirror) {
-    vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
-    vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
-    rayIntersection = reflectionGetClosestIntersection(reflectionRay, modelTriangles, rayIntersection.intersectionPoint, TextureMaps, recursionCount++);
-  }
-  return rayIntersection;
 }
 
 RayTriangleIntersection reflectionGetClosestIntersection(vec3 rayDirection, vector<ModelTriangle> modelTriangles, vec3 rayOrigin, unordered_map<string, TextureMap>& TextureMaps, int recursionCount) {
@@ -875,7 +798,7 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
         rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
         rayIntersection.u = u;
         rayIntersection.v = v;
-        if (rayIntersection.intersectedTriangle.mirror) {
+        if (rayIntersection.intersectedTriangle.mirror && !rayIntersection.intersectedTriangle.metal) {
           vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
           vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
           RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(normalize(reflectionRay), modelTriangles, rayIntersection.intersectionPoint, TextureMaps, 0);
@@ -885,15 +808,6 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
             rayIntersection = reflectionIntersection;
             rayIntersection.distanceFromCamera = t;
           }
-        } else if (rayIntersection.intersectedTriangle.glass) {
-          vec3 surfaceNormal = rayIntersection.intersectedTriangle.normal;
-          vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
-          RayTriangleIntersection reflectionIntersection = reflectionGetClosestIntersection(reflectionRay, modelTriangles, rayIntersection.intersectionPoint, TextureMaps, 0);
-
-          vec3 refractionRay = getRefractionRay(rayDirection, rayIntersection.intersectedTriangle.normal, 1.30f);
-          RayTriangleIntersection refractionIntersection = refractionGetClosestIntersection(refractionRay, modelTriangles, rayIntersection.intersectionPoint, TextureMaps, 0);
-          refractionIntersection.pointColour = fresnelBlend(reflectionIntersection.pointColour, refractionIntersection.pointColour, rayDirection, rayIntersection.intersectedTriangle.normal, 1.30f);
-          rayIntersection = refractionIntersection;
         } else if (rayIntersection.intersectedTriangle.texture) {
           uint32_t c = texturePixel(rayIntersection, TextureMaps[rayIntersection.intersectedTriangle.colour.name]);
           rayIntersection.pointColour = convert_colour_type(c);
@@ -917,8 +831,7 @@ RayTriangleIntersection getClosestIntersection(vec3 rayDirection, vector<ModelTr
   return rayIntersection;
 }
 
-void rayTraceRenderMultiThread(float focalLength, DrawingWindow &window, const vector<ModelTriangle> &modelTriangles,
-                    unordered_map<string, TextureMap> &TextureMaps, const vector<vec3> &lights) {
+void rayTraceRenderMultiThread(float focalLength, DrawingWindow &window, const vector<ModelTriangle> &modelTriangles, unordered_map<string, TextureMap> &TextureMaps, const vector<vec3> &lights) {
     // Number of threads to use (based on hardware concurrency)
     const int numThreads = std::thread::hardware_concurrency();
     const int chunkSize = WIDTH / numThreads; // Divide the screen into chunks for each thread
@@ -929,21 +842,18 @@ void rayTraceRenderMultiThread(float focalLength, DrawingWindow &window, const v
             for (int y = 0; y < HEIGHT; y++) {
                 float xT = x - WIDTH / 2;
                 float yT = HEIGHT / 2 - y;
-                vec3 transposedPoint = vec3(xT / (WIDTH / 2), yT / (HEIGHT / 2), -focalLength);
+                vec3 transposedPoint = vec3(xT / (WIDTH / 2), yT / (WIDTH / 2), -focalLength);
                 vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
                 RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
 
                 int blockedLights = 0;
-                if (closestIntersection.hit)
-                    blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
-
-                float shadowIntensity = 1.0f;
-                if (closestIntersection.intersectedTriangle.shadows && !closestIntersection.intersectedTriangle.normalMap &&
-                    blockedLights > 0) {
-                    shadowIntensity = 0.8f * (1.0f - static_cast<float>(blockedLights) / (static_cast<float>(lights.size()) - 1.0f)) +
-                                      0.2f;
+                if (closestIntersection.hit && closestIntersection.intersectedTriangle.shadows) {
+                  blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
                 }
-
+                float shadowIntensity = 1.0f;
+                if (softShadows && blockedLights > 0 && closestIntersection.intersectedTriangle.shadows) {
+                  shadowIntensity = 0.7f * (1.0f - static_cast<float>(blockedLights) / static_cast<float>(lights.size())) + 0.3f;
+                }
                 if (!closestIntersection.hit) {
                     // If we hit the environment map
                     Colour envMapColour = envMapDirection(rayDirection, TextureMaps);
@@ -953,21 +863,26 @@ void rayTraceRenderMultiThread(float focalLength, DrawingWindow &window, const v
                     float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
                     window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
                 } else {
-                    float intensity = 0.0f;
-                    Colour colour;
-
-                    if (closestIntersection.intersectedTriangle.shadingMode == PHONG) {
-                        intensity = phong(closestIntersection, lights[0]);
-                        colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
-                    } else if (closestIntersection.intersectedTriangle.shadingMode == GOURAD) {
-                        intensity = gourad(closestIntersection, lights[0]);
-                        colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
-                    } else if (closestIntersection.intersectedTriangle.shadingMode == NONE) {
-                        intensity = combinedLighting(closestIntersection, lights[0]);
-                        colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
-                    }
-
+                  if (closestIntersection.intersectedTriangle.mirror) {
+                    Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1));
+                    window.setPixelColour(x, y, pack_colour(colour, 1));
+                  } else if (!softShadows && blockedLights > 0 && closestIntersection.intersectedTriangle.shadows && dot(rayDirection, closestIntersection.intersectedTriangle.normal) < 0) {
+                    shadowIntensity = 0.2f;
+                    Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1));
                     window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+                  } else if (closestIntersection.intersectedTriangle.shadingMode == PHONG) {
+                    float intensity = phong(closestIntersection, lights[0]);
+                    Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+                    window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+                  } else if (closestIntersection.intersectedTriangle.shadingMode == GOURAD) {
+                    float intensity = gourad(closestIntersection, lights[0]);
+                    Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+                    window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+                  } else if (closestIntersection.intersectedTriangle.shadingMode == NONE) {
+                    float intensity = combinedLighting(closestIntersection, lights[0]);
+                    Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
+                    window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+                  }
                 }
             }
         }
@@ -994,14 +909,14 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
     for (int y = 0; y < HEIGHT; y++) {
       float xT = x - WIDTH / 2;
       float yT = HEIGHT / 2 - y;
-      vec3 transposedPoint = vec3(xT / (WIDTH / 2) , yT / (HEIGHT / 2), -focalLength);
+      vec3 transposedPoint = vec3(xT / (WIDTH / 2) , yT / (WIDTH / 2), -focalLength);
       vec3 rayDirection = normalize(cameraOrientation * transposedPoint);
       RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, modelTriangles, TextureMaps);
       int blockedLights = 0;
       if (closestIntersection.hit) blockedLights = checkShadow(closestIntersection, lights, modelTriangles);
       float shadowIntensity = 1;
-      if (closestIntersection.intersectedTriangle.shadows && !closestIntersection.intersectedTriangle.normalMap && blockedLights > 0) { //if the point has shadows enabled and at least 1 light point is blocked
-        shadowIntensity = 0.8f * (1.0f - static_cast<float>(blockedLights) / (static_cast<float>(lights.size()) - 1.0f)) + 0.2f;
+      if (closestIntersection.intersectedTriangle.shadows && !closestIntersection.intersectedTriangle.normalMap && blockedLights > 0 && !closestIntersection.intersectedTriangle.mirror) { //if the point has shadows enabled and at least 1 light point is blocked
+        shadowIntensity = 0.8f * (1.0f - static_cast<float>(blockedLights) / static_cast<float>(lights.size())) + 0.2f;
       }
       if (closestIntersection.hit == false) { //if we hit the env map
         Colour envMapColour = envMapDirection(rayDirection, TextureMaps);
@@ -1011,7 +926,18 @@ void rayTraceRender(float focalLength, DrawingWindow &window, vector<ModelTriang
         float mapNormalIntensity = normalMapIntensity(closestIntersection, pointNormal, lights[0]);
         window.setPixelColour(x, y, pack_colour(Colour(170, 74, 68), mapNormalIntensity));
       } else {
-        if (closestIntersection.intersectedTriangle.shadingMode == PHONG) {
+        if (closestIntersection.intersectedTriangle.mirror) {
+          Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1));
+          window.setPixelColour(x, y, pack_colour(colour, 1));
+        } else if (!softShadows && blockedLights > 0 && closestIntersection.intersectedTriangle.shadows) {
+          shadowIntensity = 0.2f;
+          Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1));
+          window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+        } else if (softShadows && blockedLights > 0 && closestIntersection.intersectedTriangle.shadows) {
+          shadowIntensity = 0.8f * (1.0f - static_cast<float>(blockedLights) / (static_cast<float>(lights.size()) - 1.0f)) + 0.2f;
+          Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, 1));
+          window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
+        } else if (closestIntersection.intersectedTriangle.shadingMode == PHONG) {
           float intensity = phong(closestIntersection, lights[0]);
           Colour colour = convert_colour_type(pack_colour(closestIntersection.pointColour, intensity));
           window.setPixelColour(x, y, pack_colour(colour, shadowIntensity));
@@ -1045,6 +971,14 @@ vector<vec3> generateLights(int gridSize, float spacing, vec3 centreLight) {
   return lights;
 }
 
+void printCamValues() {
+  cout << "Cam Pos: " << cameraPosition.x << ", " << cameraPosition.y << ", " << cameraPosition.z << endl;
+  cout << "Cam Orientation: " << endl;
+  for (int row = 0; row < 3; ++row) {
+    cout << cameraOrientation[row][0] << " " << cameraOrientation[row][1] << " " << cameraOrientation[row][2] << endl;
+  }
+}
+
 void draw(DrawingWindow &window) {
   window.clearPixels();
   orbit(orbiting);
@@ -1074,7 +1008,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
     else if (event.key.keysym.sym == SDLK_b) { renderMode = 0; cout << "RenderMode: Wireframe" << endl; }
     else if (event.key.keysym.sym == SDLK_n) { renderMode = 1; cout << "RenderMode: Rasterised" << endl; }
     else if (event.key.keysym.sym == SDLK_m) { renderMode = 2; cout << "RenderMode: Ray Tracing" << endl; }
-    else if (event.key.keysym.sym == SDLK_y) { lights[0] = vec3(0, 1.2, -1); }
+    else if (event.key.keysym.sym == SDLK_y) { printCamValues(); }
     else if (event.key.keysym.sym == SDLK_u) { lights[0] = vec3(0, 1.2, 0); }
     else if (event.key.keysym.sym == SDLK_i) { lights[0] = vec3(1, 1.2, 0); }
   } else if (event.type == SDL_MOUSEBUTTONDOWN) {
@@ -1083,13 +1017,30 @@ void handleEvent(SDL_Event event, DrawingWindow &window, vector<vec3> &lights) {
   }
 }
 
+// Helper functions
+vec3 lerp(const vec3 start, const vec3 end, float t) {
+  return t * (end - start);
+}
+
+// Ease In-Out Cubic for non-linear motion
+float easeInOutCubic(float t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;
+}
+
+glm::mat3 interpolateOrientation(const glm::mat3& start, const glm::mat3& end, float t) {
+  // Convert 3x3 matrices to quaternions
+  glm::quat quatStart = glm::quat_cast(start);
+  glm::quat quatEnd = glm::quat_cast(end);
+
+  // Perform SLERP interpolation
+  glm::quat quatInterpolated = glm::slerp(quatStart, quatEnd, t);
+
+  // Convert quaternion back to 3x3 matrix
+  return glm::mat3_cast(quatInterpolated);
+}
+
+
 void animation(float focalLength, DrawingWindow &window) {
-  int frames = 0;
-
-  vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.3, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
-  vector<ModelTriangle> rayTraceScene1 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
-  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.35, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false, PHONG);
-
   unordered_map<string, TextureMap> textures;
   textures["../models/texture.ppm"] = TextureMap("../models/texture.ppm");
   textures["../models/brick_normal_map.ppm"] = TextureMap("../models/brick_normal_map.ppm");
@@ -1100,19 +1051,58 @@ void animation(float focalLength, DrawingWindow &window) {
   textures["../models/env-map/px.ppm"] = TextureMap("../models/env-map/posx.ppm");
   textures["../models/env-map/py.ppm"] = TextureMap("../models/env-map/posy.ppm");
   textures["../models/env-map/pz.ppm"] = TextureMap("../models/env-map/posz.ppm");
-  bool softShadows = false;
-  float spacing = 0.035;
-  int gridSize = 16.00;
-  vec3 centrelight(0,1.3,0);
+
+  vector<ModelTriangle> modelTriangles = parseObj("../models/cornell-box.obj", 0.3, parseMtl("../models/cornell-box.mtl"), vec3(0,0,0), true, NONE);
+  vector<ModelTriangle> rayTraceScene1 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
+  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(-0.5,0.05,-0.80), false, PHONG);
+  vector<ModelTriangle> rayTraceScene2 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);;
+
+  vector<ModelTriangle> sphereTriangles2 = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(0.5,0.05,-0.80), false, PHONG);
+  vector<ModelTriangle> mirror = parseObj("../models/mirror.obj", 0.30, parseMtl("../models/mirror.mtl"), vec3(0,0,0), true, NONE);
+  rayTraceScene2.insert(rayTraceScene2.end(), sphereTriangles2.begin(), sphereTriangles2.end());
+  rayTraceScene2.insert(rayTraceScene2.end(), mirror.begin(), mirror.end());
+  mat3 orientation1 = mat3(vec3(1.0,0.0,0.0),vec3(0.0,1.0,0.0),vec3(0.0,0.0,1.0));
+  mat3 orientation2 = mat3(vec3(0.829039, 0, 0.559194), vec3(0, 1, 0), vec3(-0.559194, 0, 0.829039));
+  vector<ModelTriangle> rayTraceScene3 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);;
+  vector<ModelTriangle> sphereTriangles3 = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(0.5,0.05,-0.80), false, NONE);
+  rayTraceScene3.insert(rayTraceScene3.end(), mirror.begin(), mirror.end());
+  rayTraceScene3.insert(rayTraceScene3.end(), sphereTriangles3.begin(), sphereTriangles3.end());
+  vector<ModelTriangle> rayTraceScene4 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);;
+  vector<ModelTriangle> sphereTriangles4 = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(0.5,0.05,-0.80), false, GOURAD);
+  rayTraceScene4.insert(rayTraceScene4.end(), mirror.begin(), mirror.end());
+  rayTraceScene4.insert(rayTraceScene4.end(), sphereTriangles4.begin(), sphereTriangles4.end());
+  vector<ModelTriangle> rayTraceScene5 = rayTraceScene2;
+  vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.2, parseMtl("../models/normal_map_cube.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
+  vector<ModelTriangle> woodTopTriangles = parseObj("../models/wood-top.obj", 0.2, parseMtl("../models/wood-top.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
+  vector<ModelTriangle> lpbunnyTriangles = parseObj("../models/lpbunny.obj", 0.25, parseMtl("../models/lpbunny.mtl"), vec3(0.05,-0.05,0.05), false, NONE);
+  rayTraceScene5.insert(rayTraceScene5.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
+  rayTraceScene5.insert(rayTraceScene5.end(), woodTopTriangles.begin(), woodTopTriangles.end());
+  rayTraceScene5.insert(rayTraceScene5.end(), lpbunnyTriangles.begin(), lpbunnyTriangles.end());
+  mat3 orientation3 = mat3(vec3(0.961262, 0, 0.275637), vec3(0, 1, 0), vec3(-0.275637, 0, 0.961262));
+  mat3 orientation4 = mat3(vec3(0.838671,0,-0.544639),vec3(0 ,1 ,0),vec3(0.544639,0,0.838671));
+  mat3 orientation5 = mat3(vec3(1,0,0),vec3(0,0.990268,-0.139173), vec3(0, 0.139173, 0.990268));
+  vector<ModelTriangle> rayTraceScene6 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);;
+  rayTraceScene6.insert(rayTraceScene6.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
+  rayTraceScene6.insert(rayTraceScene6.end(), woodTopTriangles.begin(), woodTopTriangles.end());
+  rayTraceScene6.insert(rayTraceScene6.end(), lpbunnyTriangles.begin(), lpbunnyTriangles.end());
+
+
+  softShadows = true;
+  float spacing = 0.035 / 2.0f;
+  int gridSize = 8.00;
+  vec3 centrelight(0,0.8,0);
   vector<vec3> lights;
   if (softShadows) {
     lights = generateLights(gridSize, spacing, centrelight);
   } else {
     lights.push_back(centrelight);
   }
+
+  int frames = 325;
+  cameraPosition = vec3(0, 0.4, 3.3);
+  cameraOrientation = orientation5;
   draw(window);
-  while (frames < 200)
-  {
+  while (frames < 386) {
     window.clearPixels();
     if (frames < 25) { //Wire Frame Scene (orbits wireframe)
       wireFrameRender(2.0, window, modelTriangles);
@@ -1122,16 +1112,68 @@ void animation(float focalLength, DrawingWindow &window) {
       rasterisedRender(2.0, window, modelTriangles);
       cameraPosition = rot_y_axis(-2 * PI / 25) * cameraPosition;
       lookAtPoint(vec3(0,0,0));
-    } else if (frames >= 50 && frames < 60) {
+    } else if (frames >= 50 && frames < 55) {
+      cameraPosition = vec3(0,0,4);
+      rasterisedRender(2.0, window, modelTriangles);
+    } else if (frames >= 55 && frames < 95) {
+      vector<ModelTriangle> rayTraceScene1 = parseObj("../models/textured-cornell-box.obj", 0.3, parseMtl("../models/textured-cornell-box.mtl"), vec3(0,0,0), true, NONE);
+      vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(-0.5 + 0.025 * (frames - 55),0.05,-0.80), false, PHONG);
+      rayTraceScene1.insert(rayTraceScene1.end(), sphereTriangles.begin(), sphereTriangles.end());
       rayTraceRenderMultiThread(2.0, window, rayTraceScene1, textures, lights);
-    } else if (frames >= 60 && frames < 120) {
-      float temp_c = frames+1;
-      float temp_c1 = 120-frames;
-      // cout << temp_c << endl;
-      cameraPosition.z -= 0.25*(1/temp_c1);//0.0125;
-      cameraPosition.x += 0.25*(1/temp_c);//steps_48[i];//temp_c;
-      lookAtPoint(vec3(0,0,0));
-      rayTraceRenderMultiThread(2.0, window, rayTraceScene1, textures, lights);
+    } else if (frames >= 95 && frames < 126) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene2, textures, lights);
+      float t = float(frames - 95) / float(125 - 95);
+      cameraOrientation = interpolateOrientation(orientation1, orientation2, t);
+      static vec3 stepSize = (vec3(-0.5, 0.5, 0.9) - vec3(0, 0, 4)) / float(125 - 95);
+      cameraPosition += stepSize;
+    } else if (frames >= 126 && frames < 145) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene3, textures, lights); //no shading ball
+    } else if (frames >= 145 && frames < 164) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene4, textures, lights); //gourad shading ball
+    } else if (frames >= 164 && frames < 190) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights); // normal map and bunny (shows bunny)
+      float t = float(frames - 164) / float(189 - 164);
+      cameraOrientation = interpolateOrientation(orientation2, orientation3, t);
+      static vec3 stepSize = (vec3(-0.3, 0, 1.2) - vec3(-0.5, 0.5, 0.9)) / float(189 - 164);
+      cameraPosition += stepSize;
+    } else if (frames >= 190 && frames < 220) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights); // normal map and bunny (shows bunny)
+      float t = float(frames - 190) / float(219 - 190);
+      cameraOrientation = interpolateOrientation(orientation3, orientation4, t);
+      static vec3 stepSize = (vec3(1.4, 0.1, 2.8) - vec3(-0.3, 0, 1.2)) / float(219 - 190);
+      cameraPosition += stepSize;
+    } else if (frames >= 220 && frames < 230) { // move light towards front
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].z += 0.02;
+    } else if (frames >= 230 && frames < 250) { // move light towards front left
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].x -= 0.02;
+    } else if (frames >= 250 && frames < 280) { // move light to front right
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].x += 0.02;
+    } else if (frames >= 280 && frames < 295) { // move light towards front left
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].x -= 0.02;
+    } else if (frames >= 295 && frames < 305) { // move light towards front
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].z -= 0.02;
+    } else if (frames >= 305 && frames < 325) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      float t = float(frames - 305) / float(324 - 305);
+      cameraOrientation = interpolateOrientation(orientation4, orientation5, t);
+      static vec3 stepSize = (vec3(0, 0.4, 3.3) - vec3(1.4, 0.1, 2.8)) / float(324 - 305);
+      cameraPosition += stepSize;
+    } else if (frames >= 325 && frames < 340) {
+      if (softShadows == false) lights = generateLights(gridSize, spacing, centrelight);
+      if (softShadows == false) softShadows = true;
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].x -= 0.02;
+    } else if (frames >= 340 && frames < 370) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].x += 0.02;
+    } else if (frames >= 370 && frames < 386) {
+      rayTraceRenderMultiThread(2.0, window, rayTraceScene5, textures, lights);
+      lights[0].x -= 0.02;
     }
     window.renderFrame();
     std::cout << "Saving frame " << frames << " to PPM..." << std::endl;
@@ -1157,17 +1199,16 @@ int main(int argc, char *argv[])
   }
 
   //soft shadow lights initialisation
-  bool softShadows = false;
-  float spacing = 0.035;
-  int gridSize = 16.00;
-  vec3 centrelight(0,1.3,0);
+  softShadows = false;
+  float spacing = 0.03;
+  int gridSize = 8.00;
+  vec3 centrelight(0,0.8,0);
   vector<vec3> lights;
   if (softShadows) {
     lights = generateLights(gridSize, spacing, centrelight);
   } else {
     lights.push_back(centrelight);
   }
-
   vector<ModelTriangle> modelTriangles;
   reset_camera();
   if (textureToggle) {
@@ -1178,9 +1219,9 @@ int main(int argc, char *argv[])
   vector<ModelTriangle> normalCubeTriangles = parseObj("../models/normal_map_cube.obj", 0.2, parseMtl("../models/normal_map_cube.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
   vector<ModelTriangle> woodTopTriangles = parseObj("../models/wood-top.obj", 0.2, parseMtl("../models/wood-top.mtl"), vec3(-0.62, -0.62, 0.55), true, NONE);
   // vector<ModelTriangle> lightCubeTriangles = parseObj("../models/light_cube.obj", 0.1, parseMtl("../models/normal_map_cube.mtl"), lights[0], false, NONE);
-  // vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.35, parseMtl("../models/sphere.mtl"), vec3(1,-1,-1.5), false, PHONG);
-  vector<ModelTriangle> lpbunnyTriangles = parseObj("../models/lpbunny.obj", 0.35, parseMtl("../models/lpbunny.mtl"), vec3(-0.05,0.05,-0.05), false, NONE);
-  // modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
+  vector<ModelTriangle> sphereTriangles = parseObj("../models/sphere.obj", 0.30, parseMtl("../models/sphere.mtl"), vec3(-0.5,0.05,-0.80), false, PHONG);
+  vector<ModelTriangle> lpbunnyTriangles = parseObj("../models/lpbunny.obj", 0.25, parseMtl("../models/lpbunny.mtl"), vec3(0.05,-0.05,0.05), false, NONE);
+  modelTriangles.insert(modelTriangles.end(), sphereTriangles.begin(), sphereTriangles.end());
   modelTriangles.insert(modelTriangles.end(), normalCubeTriangles.begin(), normalCubeTriangles.end());
   modelTriangles.insert(modelTriangles.end(), woodTopTriangles.begin(), woodTopTriangles.end());
   modelTriangles.insert(modelTriangles.end(), lpbunnyTriangles.begin(), lpbunnyTriangles.end());
@@ -1194,7 +1235,7 @@ int main(int argc, char *argv[])
     draw(window);
     if (renderMode == 0) { wireFrameRender(2.0, window, modelTriangles); }
     else if (renderMode == 1) { rasterisedRender(2.0, window, modelTriangles); }
-    else if (renderMode == 2) { rayTraceRender(2.0, window, modelTriangles, textures, lights); }
+    else if (renderMode == 2) { rayTraceRenderMultiThread(2.0, window, modelTriangles, textures, lights); }
     // Need to render the frame at the end, or nothing actually gets shown on the screen !
     window.renderFrame();
   }
