@@ -23,8 +23,16 @@ set(GLM_INCLUDE_DIRS libs/glm-0.9.7.2)
 find_package(SDL2 REQUIRED)
 find_package(Threads REQUIRED)
 
-include_directories(${SDL2_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS})
-include_directories(libs/sdw)
+include_directories(
+    ${SDL2_INCLUDE_DIRS}
+    ${GLM_INCLUDE_DIRS}
+    libs/sdw
+    src
+    src/camera
+    src/scene
+    src/render
+    src/drawing
+)
 
 add_executable(RedNoise
         libs/sdw/CanvasPoint.cpp
@@ -36,10 +44,16 @@ add_executable(RedNoise
         libs/sdw/TextureMap.cpp
         libs/sdw/TexturePoint.cpp
         libs/sdw/Utils.cpp
-        src/RedNoise.cpp
-        src/camera.cpp
-        src/camera.h
-        src/intersectionFunctions.h)
+        src/camera/Camera.cpp
+        src/drawing/Projection.cpp
+        src/render/PointCloudRenderer.cpp
+        src/scene/Scene.cpp
+        src/scene/SceneLoader.cpp
+        src/scene/ObjParser.cpp
+        src/scene/MtlParser.cpp
+        src/other/Constants.cpp
+        src/main.cpp
+)
 
 if (MSVC)
     target_compile_options(RedNoise
