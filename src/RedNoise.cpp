@@ -1228,6 +1228,6 @@ int main(int argc, char *argv[])
     else if (renderMode == 1) { rasterisedRender(2.0, window, modelTriangles); }
     else if (renderMode == 2) { rayTraceRenderMultiThread(2.0, window, modelTriangles, textures, lights); }
     // Need to render the frame at the end, or nothing actually gets shown on the screen !
-    window.renderFrame();
+    window.renderFrame(); 
   }
 }

@@ -46,7 +46,12 @@ add_executable(RedNoise
         libs/sdw/Utils.cpp
         src/camera/Camera.cpp
         src/drawing/Projection.cpp
+        src/drawing/Line.cpp
+        src/drawing/Fill.cpp
         src/render/PointCloudRenderer.cpp
+        src/render/WireFrameRenderer.cpp
+        src/render/RasterisedRenderer.cpp
+        src/render/DepthBuffer.cpp
         src/scene/Scene.cpp
         src/scene/SceneLoader.cpp
         src/scene/ObjParser.cpp
