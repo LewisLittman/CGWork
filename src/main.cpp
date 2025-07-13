@@ -6,6 +6,7 @@
 #include "WireFrameRenderer.h"
 #include "RasterisedRenderer.h"
 #include "DepthBuffer.h"
+#include "RayTraceRenderer.h"
 #include "./other/Constants.h"
 #include <memory>
 
@@ -38,6 +39,7 @@ void handleEvent(SDL_Event event, Scene &scene, std::unique_ptr<Renderer>& rende
     else if (event.key.keysym.sym == SDLK_v) { renderer = std::make_unique<PointCloudRenderer>(); std::cout << "Renderer: Point Cloud" << std::endl; }
     else if (event.key.keysym.sym == SDLK_b) { renderer = std::make_unique<WireFrameRenderer>(); std::cout << "Renderer: Wire Frame" << std::endl; }
     else if (event.key.keysym.sym == SDLK_n) { renderer = std::make_unique<RasterisedRenderer>(); std::cout << "Renderer: Rasterised" << std::endl; }
+    else if (event.key.keysym.sym == SDLK_m) { renderer = std::make_unique<RayTraceRenderer>(); std::cout << "Renderer: Ray Trace" << std::endl; }
     // else if (event.key.keysym.sym == SDLK_n) { renderMode = 2; cout << "RenderMode: Ray Tracing" << endl; }
     // else if (event.key.keysym.sym == SDLK_y) { printCamValues(); }
     // else if (event.key.keysym.sym == SDLK_u) { lights[0] = vec3(0, 1.2, 0); }
@@ -51,7 +53,7 @@ void handleEvent(SDL_Event event, Scene &scene, std::unique_ptr<Renderer>& rende
 
 int main(int argc, char *argv[]) {
     std::cout << "Starting the 3D Renderer..." << std::endl;
-    DrawingWindow window(640, 480, false);
+    DrawingWindow window(320, 240, false);
     SDL_Event event;
     std::cout << "Window created with dimensions: " << window.width << "x" << window.height << std::endl;
     Scene scene = SceneLoader::loadScene();
@@ -71,6 +73,7 @@ int main(int argc, char *argv[]) {
             renderer->render(2.0f, window, scene);
         }
         window.renderFrame();
+        std::cout << "Rendering frame..." << std::endl;
     }
     return 0;
 }

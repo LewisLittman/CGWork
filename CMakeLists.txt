@@ -52,6 +52,7 @@ add_executable(RedNoise
         src/render/WireFrameRenderer.cpp
         src/render/RasterisedRenderer.cpp
         src/render/DepthBuffer.cpp
+        src/render/RayTraceRenderer.cpp
         src/scene/Scene.cpp
         src/scene/SceneLoader.cpp
         src/scene/ObjParser.cpp
