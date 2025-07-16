@@ -5,14 +5,14 @@
 # Where `Release` can be replaced with `Debug`, which contains gdb and address sanitiser definitions already written for you.
 # Once a build is created, proceed with *compilation*:
 # 
-#   cmake --build build --target RedNoise --config Release # optionally, for parallel build, append -j $(nproc)
+#   cmake --build build --target RunEngine --config Release # optionally, for parallel build, append -j $(nproc)
 #
 # This creates the executable in the build directory. You only need to *generate* a build if you modify the CMakeList.txt file.
 # For any other changes to the source code, simply recompile.
 
 
 cmake_minimum_required(VERSION 3.12)
-project(RedNoise)
+project(RunEngine)
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -34,7 +34,7 @@ include_directories(
     src/drawing
 )
 
-add_executable(RedNoise
+add_executable(RunEngine
         libs/sdw/CanvasPoint.cpp
         libs/sdw/CanvasTriangle.cpp
         libs/sdw/Colour.cpp
@@ -62,7 +62,7 @@ add_executable(RedNoise
 )
 
 if (MSVC)
-    target_compile_options(RedNoise
+    target_compile_options(RunEngine
             PUBLIC
             /W3
             /Zc:wchar_t
@@ -73,7 +73,7 @@ if (MSVC)
         set(SDL2_LIBRARIES SDL2::SDL2 SDL2::SDL2main)
     endif()
 else ()
-    target_compile_options(RedNoise
+    target_compile_options(RunEngine
         PUBLIC
         -Wall
         -Wextra
@@ -86,13 +86,13 @@ else ()
 
     set(DEBUG_OPTIONS -O2 -fno-omit-frame-pointer -g)
     set(RELEASE_OPTIONS -O3 -march=native -mtune=native)
-    target_link_libraries(RedNoise PUBLIC $<$<CONFIG:Debug>:-Wl,-lasan>)
+    target_link_libraries(RunEngine PUBLIC $<$<CONFIG:Debug>:-Wl,-lasan>)
 
 endif()
 
 
-target_compile_options(RedNoise PUBLIC "$<$<CONFIG:RelWithDebInfo>:${RELEASE_OPTIONS}>")
-target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Release>:${RELEASE_OPTIONS}>")
-target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Debug>:${DEBUG_OPTIONS}>")
+target_compile_options(RunEngine PUBLIC "$<$<CONFIG:RelWithDebInfo>:${RELEASE_OPTIONS}>")
+target_compile_options(RunEngine PUBLIC "$<$<CONFIG:Release>:${RELEASE_OPTIONS}>")
+target_compile_options(RunEngine PUBLIC "$<$<CONFIG:Debug>:${DEBUG_OPTIONS}>")
  
-target_link_libraries(RedNoise PRIVATE ${SDL2_LIBRARIES} Threads::Threads)
+target_link_libraries(RunEngine PRIVATE ${SDL2_LIBRARIES} Threads::Threads)
