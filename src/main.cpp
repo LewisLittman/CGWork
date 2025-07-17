@@ -53,7 +53,7 @@ void handleEvent(SDL_Event event, Scene &scene, std::unique_ptr<Renderer>& rende
 
 int main(int argc, char *argv[]) {
     std::cout << "Starting the 3D Renderer..." << std::endl;
-    DrawingWindow window(320, 240, false);
+    DrawingWindow window(640, 480, false);
     SDL_Event event;
     std::cout << "Window created with dimensions: " << window.width << "x" << window.height << std::endl;
     Scene scene = SceneLoader::loadScene();
@@ -73,7 +73,6 @@ int main(int argc, char *argv[]) {
             renderer->render(2.0f, window, scene);
         }
         window.renderFrame();
-        std::cout << "Rendering frame..." << std::endl;
     }
     return 0;
 }

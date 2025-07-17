@@ -1,8 +1,8 @@
 #include "RayTraceRenderer.h"
 // #include "ModelTriangle.h"
 #include <thread>
-// #include <glm/glm.hpp>
-// #include <glm/ext.hpp>
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
 
 
 void RayTraceRenderer::render(float focalLength, DrawingWindow& window, const Scene& scene) {
@@ -20,10 +20,10 @@ void RayTraceRenderer::render(float focalLength, DrawingWindow& window, const Sc
         float yT = halfHeight - static_cast<float>(y);
         glm::vec3 transposedPoint = glm::vec3(xT / halfWidth, yT / halfWidth, -focalLength);
         glm::vec3 rayDirection = glm::normalize(scene.camera.orientation * transposedPoint);
-        RayTriangleIntersection closestIntersection = getClosestIntersection(rayDirection, scene);
+        RayTriangleIntersection rayHit = traceRay(scene.camera.position, rayDirection, scene, 3);
 
-        if (closestIntersection.hit) {
-          uint32_t c = (255 << 24) + (closestIntersection.pointColour.red << 16) + (closestIntersection.pointColour.green << 8) + closestIntersection.pointColour.blue;
+        if (rayHit.hit) {
+          uint32_t c = (255 << 24) + (rayHit.pointColour.red << 16) + (rayHit.pointColour.green << 8) + rayHit.pointColour.blue;
           window.setPixelColour(x, y, c);
         } else {
           window.setPixelColour(x, y, 0);
@@ -45,43 +45,30 @@ void RayTraceRenderer::render(float focalLength, DrawingWindow& window, const Sc
   }
 }
 
-// RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3& rayDirection, const Scene& scene) {
-// RayTriangleIntersection rayIntersection;
-//   rayIntersection.hit = false;
-//   rayIntersection.distanceFromCamera = std::numeric_limits<float>::infinity();
-//   for (int i = 0; i < scene.triangles.size(); i++) {
-//     ModelTriangle triangle = scene.triangles[i];
-//     glm::vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
-//     glm::vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
-//     glm::vec3 SPVector = scene.camera.position - triangle.vertices[0];
-//     glm::mat3 DEMatrix(-rayDirection, e0, e1);
-//     glm::vec3 possibleSolution = glm::inverse(DEMatrix) * SPVector;
-//     float t = possibleSolution.x;
-//     float u = possibleSolution.y;
-//     float v = possibleSolution.z;
-//     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && u + v <= 1.0) {
-//       if (t < rayIntersection.distanceFromCamera && t > 0)
-//       {
-//         rayIntersection.hit = true;
-//         rayIntersection.distanceFromCamera = t;
-//         rayIntersection.triangleIndex = i;
-//         rayIntersection.intersectedTriangle = triangle;
-//         rayIntersection.intersectionPoint = triangle.vertices[0] + u * e0 + v * e1;
-//         rayIntersection.u = u;
-//         rayIntersection.v = v;
-//         rayIntersection.pointColour = triangle.colour;
-//       }  
-//     }
-//   }
-//   return rayIntersection;
-// }
+RayTriangleIntersection RayTraceRenderer::traceRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const Scene& scene, int depth) {
+    if (depth <= 0) {
+        return {}; 
+    }
 
-RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3& rayDirection, const Scene& scene) {
+    RayTriangleIntersection closestIntersection = getClosestIntersection(rayOrigin, rayDirection, scene);
+    if (!closestIntersection.hit) {
+        return closestIntersection;
+    }
+
+    if (closestIntersection.intersectedTriangle.mirror) {
+        glm::vec3 surfaceNormal = closestIntersection.intersectedTriangle.normal;
+        glm::vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
+
+        return traceRay(closestIntersection.intersectionPoint, reflectionRay, scene, depth - 1);
+    }
+
+    return closestIntersection;
+}
+
+RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3& rayOrigin,const glm::vec3& rayDirection, const Scene& scene) {
     RayTriangleIntersection rayIntersection;
     rayIntersection.hit = false;
     rayIntersection.distanceFromCamera = std::numeric_limits<float>::infinity();
-
-    glm::vec3 rayOrigin = scene.camera.position;
 
     for (int i = 0; i < scene.triangles.size(); i++) {
         const ModelTriangle& triangle = scene.triangles[i];
@@ -107,7 +94,7 @@ RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3
         if (v < 0.0f || u + v > 1.0f) continue;
 
         float t = f * glm::dot(edge2, q);
-        if (t > 0.0f && t < rayIntersection.distanceFromCamera) {
+        if (t > 0.00001f && t < rayIntersection.distanceFromCamera) {
             rayIntersection.hit = true;
             rayIntersection.distanceFromCamera = t;
             rayIntersection.triangleIndex = i;
@@ -118,6 +105,5 @@ RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3
             rayIntersection.pointColour = triangle.colour;
         }
     }
-
     return rayIntersection;
 }

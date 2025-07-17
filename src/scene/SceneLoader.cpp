@@ -28,12 +28,14 @@ Scene SceneLoader::loadScene() {
 
     // Models
     auto cornellBox = parseObj("/home/lewis/CGWork/models/textured-cornell-box.obj", 0.3f, parseMtl("/home/lewis/CGWork/models/textured-cornell-box.mtl"), glm::vec3(0, 0, 0), true, NONE);
+    auto mirror     = parseObj("/home/lewis/CGWork/models/mirror.obj", 0.3f, parseMtl("/home/lewis/CGWork/models/mirror.mtl"), glm::vec3(0, 0, 0), true, NONE);
     auto normalCube = parseObj("/home/lewis/CGWork/models/normal_map_cube.obj", 0.2f, parseMtl("/home/lewis/CGWork/models/normal_map_cube.mtl"), glm::vec3(-0.62, -0.62, 0.55), true, NONE);
     auto woodTop    = parseObj("/home/lewis/CGWork/models/wood-top.obj", 0.2f, parseMtl("/home/lewis/CGWork/models/wood-top.mtl"), glm::vec3(-0.62, -0.62, 0.55), true, NONE);
     auto sphere     = parseObj("/home/lewis/CGWork/models/sphere.obj", 0.3f, parseMtl("/home/lewis/CGWork/models/sphere.mtl"), glm::vec3(-0.5, 0.05, -0.80), false, PHONG);
     auto bunny      = parseObj("/home/lewis/CGWork/models/lpbunny.obj", 0.25f, parseMtl("/home/lewis/CGWork/models/lpbunny.mtl"), glm::vec3(0.05, -0.05, 0.05), false, NONE);
 
     scene.addTriangles(cornellBox);
+    scene.addTriangles(mirror);
     scene.addTriangles(normalCube);
     scene.addTriangles(woodTop);
     scene.addTriangles(sphere);
