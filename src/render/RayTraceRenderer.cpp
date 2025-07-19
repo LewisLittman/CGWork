@@ -23,7 +23,8 @@ void RayTraceRenderer::render(float focalLength, DrawingWindow& window, const Sc
         RayTriangleIntersection rayHit = traceRay(scene.camera.position, rayDirection, scene, 3);
 
         if (rayHit.hit) {
-          uint32_t c = (255 << 24) + (rayHit.pointColour.red << 16) + (rayHit.pointColour.green << 8) + rayHit.pointColour.blue;
+          float shadowIntensity = getShadowIntensity(rayHit, scene);
+          uint32_t c = (255 << 24) + (int(rayHit.pointColour.red * shadowIntensity) << 16) + (int(rayHit.pointColour.green * shadowIntensity) << 8) + int(rayHit.pointColour.blue * shadowIntensity);
           window.setPixelColour(x, y, c);
         } else {
           window.setPixelColour(x, y, 0);
@@ -60,6 +61,10 @@ RayTriangleIntersection RayTraceRenderer::traceRay(const glm::vec3& rayOrigin, c
         glm::vec3 reflectionRay = rayDirection - 2 * surfaceNormal * dot(rayDirection, surfaceNormal);
 
         return traceRay(closestIntersection.intersectionPoint, reflectionRay, scene, depth - 1);
+    } 
+
+    if (!closestIntersection.intersectedTriangle.mirror) {
+
     }
 
     return closestIntersection;
@@ -94,7 +99,7 @@ RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3
         if (v < 0.0f || u + v > 1.0f) continue;
 
         float t = f * glm::dot(edge2, q);
-        if (t > 0.00001f && t < rayIntersection.distanceFromCamera) {
+        if (t > 0.0001f && t < rayIntersection.distanceFromCamera) {
             rayIntersection.hit = true;
             rayIntersection.distanceFromCamera = t;
             rayIntersection.triangleIndex = i;
@@ -107,3 +112,21 @@ RayTriangleIntersection RayTraceRenderer::getClosestIntersection(const glm::vec3
     }
     return rayIntersection;
 }
+
+float RayTraceRenderer::getShadowIntensity(RayTriangleIntersection intersection, const Scene& scene) {
+    float shadowIntensity = 1.0f;
+
+    for (const auto& light : scene.lights) {
+        glm::vec3 pointToLight = light - intersection.intersectionPoint;
+        glm::vec3 offsetOrigin = intersection.intersectionPoint + 0.001f * intersection.intersectedTriangle.normal;
+        RayTriangleIntersection shadowRayHit = traceRay(offsetOrigin, glm::normalize(pointToLight), scene, 1);
+        if (shadowRayHit.hit && glm::length(shadowRayHit.intersectionPoint - intersection.intersectionPoint) < glm::length(pointToLight)) {
+            shadowIntensity *= 0.5f; 
+        }
+    }
+    return shadowIntensity;
+}
+
+// Colour RayTraceRenderer::computeLighting(const RayTriangleIntersection& intersection, const Scene& scene) {
+    
+// }

@@ -41,5 +41,7 @@ Scene SceneLoader::loadScene() {
     scene.addTriangles(sphere);
     scene.addTriangles(bunny);
 
+    scene.lights.push_back(glm::vec3(0, 0.8, 0));
+
     return scene;
 }
