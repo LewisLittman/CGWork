@@ -12,6 +12,7 @@ private:
     RayTriangleIntersection traceRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const Scene& scene, int depth);
     RayTriangleIntersection getClosestIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const Scene& scene);
     float getShadowIntensity(RayTriangleIntersection intersection, const Scene& scene);
+    uint32_t getEnvMapColour(const glm::vec3& rayDirection, const Scene& scene);
 };
 
 

@@ -19,12 +19,12 @@ Scene SceneLoader::loadScene() {
     scene.textures["/home/lewis/CGWork/models/texture.ppm"] = TextureMap("/home/lewis/CGWork/models/texture.ppm");
     scene.textures["/home/lewis/CGWork/models/brick_normal_map.ppm"] = TextureMap("/home/lewis/CGWork/models/brick_normal_map.ppm");
     scene.textures["/home/lewis/CGWork/models/WoodTexture.ppm"] = TextureMap("/home/lewis/CGWork/models/WoodTexture.ppm");
-    scene.textures["/home/lewis/CGWork/models/env-map/nx.ppm"] = TextureMap("/home/lewis/CGWork/models/env-map/negx.ppm");
-    scene.textures["/home/lewis/CGWork/models/env-map/ny.ppm"] = TextureMap("/home/lewis/CGWork/models/env-map/negy.ppm");
-    scene.textures["/home/lewis/CGWork/models/env-map/nz.ppm"] = TextureMap("/home/lewis/CGWork/models/env-map/negz.ppm");
-    scene.textures["/home/lewis/CGWork/models/env-map/px.ppm"] = TextureMap("/home/lewis/CGWork/models/env-map/posx.ppm");
-    scene.textures["/home/lewis/CGWork/models/env-map/py.ppm"] = TextureMap("/home/lewis/CGWork/models/env-map/posy.ppm");
-    scene.textures["/home/lewis/CGWork/models/env-map/pz.ppm"] = TextureMap("/home/lewis/CGWork/models/env-map/posz.ppm");
+    scene.textures["nx"] = TextureMap("/home/lewis/CGWork/models/env-map/negx.ppm");
+    scene.textures["ny"] = TextureMap("/home/lewis/CGWork/models/env-map/negy.ppm");
+    scene.textures["nz"] = TextureMap("/home/lewis/CGWork/models/env-map/negz.ppm");
+    scene.textures["px"] = TextureMap("/home/lewis/CGWork/models/env-map/posx.ppm");
+    scene.textures["py"] = TextureMap("/home/lewis/CGWork/models/env-map/posy.ppm");
+    scene.textures["pz"] = TextureMap("/home/lewis/CGWork/models/env-map/posz.ppm");
 
     // Models
     auto cornellBox = parseObj("/home/lewis/CGWork/models/textured-cornell-box.obj", 0.3f, parseMtl("/home/lewis/CGWork/models/textured-cornell-box.mtl"), glm::vec3(0, 0, 0), true, NONE);

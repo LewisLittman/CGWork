@@ -27,7 +27,8 @@ void RayTraceRenderer::render(float focalLength, DrawingWindow& window, const Sc
           uint32_t c = (255 << 24) + (int(rayHit.pointColour.red * shadowIntensity) << 16) + (int(rayHit.pointColour.green * shadowIntensity) << 8) + int(rayHit.pointColour.blue * shadowIntensity);
           window.setPixelColour(x, y, c);
         } else {
-          window.setPixelColour(x, y, 0);
+          uint32_t envMapColour = getEnvMapColour(rayDirection, scene);
+          window.setPixelColour(x, y, envMapColour);
         }
       }
     }
@@ -127,6 +128,53 @@ float RayTraceRenderer::getShadowIntensity(RayTriangleIntersection intersection,
     return shadowIntensity;
 }
 
-// Colour RayTraceRenderer::computeLighting(const RayTriangleIntersection& intersection, const Scene& scene) {
+uint32_t RayTraceRenderer::getEnvMapColour(const glm::vec3& rayDirection, const Scene& scene) {
+    float absX = fabs(rayDirection.x);
+    float absY = fabs(rayDirection.y);
+    float absZ = fabs(rayDirection.z);
+
+    float u, v;
+    std::string face;
+    if (absX >= absY && absX >= absZ) {
+      if (rayDirection.x > 0) {
+        u = rayDirection.z / absX;
+        v = -rayDirection.y / absX;
+        face = "px";
+      } else {
+        u = -rayDirection.z / absX;
+        v = -rayDirection.y / absX;
+        face = "nx";
+      }
+    } else if (absY >= absX && absY >= absZ) {
+      if (rayDirection.y > 0) {
+        u = rayDirection.x / absY;
+        v = -rayDirection.z / absY;
+        face = "py";
+      } else {
+        u = rayDirection.x / absY;
+        v = rayDirection.z / absY;
+        face = "ny";
+      }
+    } else {
+      if (rayDirection.z > 0) {
+        u = -rayDirection.x / absZ;
+        v = -rayDirection.y / absZ;
+        face = "nz";
+      } else {
+        u = rayDirection.x / absZ;
+        v = -rayDirection.y / absZ;
+        face = "pz";
+      }
+    }
     
-// }
+    float xRatio = 0.5f * (u + 1.0f);
+    float yRatio = 0.5f * (v + 1.0f);
+
+    const TextureMap& envmap = scene.textures.at(face);
+
+    float x = round(xRatio * (envmap.width - 1));
+    float y = round(yRatio * (envmap.height - 1));
+
+    float texturePixel = x + y * envmap.width;
+    return envmap.pixels[texturePixel];
+}
