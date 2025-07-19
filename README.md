@@ -19,7 +19,7 @@ A basic 3D graphics engine implemented in C++ using SDL for window and input han
     - Normal Maps
 
 ## Example Render:
-[Watch video](output.mp4)
+[Watch video](render.mp4)
 
 ## Requirements
 - CMake version 3.12+
